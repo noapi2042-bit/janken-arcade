@@ -1636,9 +1636,38 @@ button {
 }
 
 @media (max-width: 480px) {
+  .hands::before {
+    content: "";
+    position: absolute;
+    inset: -8px -4px -4px;
+    z-index: 0;
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(0, 18, 8, 0.76), rgba(0, 0, 0, 0.62));
+    box-shadow:
+      inset 0 0 18px rgba(168, 255, 112, 0.1),
+      0 0 14px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+  }
+
+  .hand-card {
+    position: relative;
+    z-index: 1;
+    background:
+      linear-gradient(180deg, rgba(168, 255, 112, 0.1), transparent 24%, rgba(0, 0, 0, 0.34)),
+      rgba(0, 0, 0, 0.52);
+  }
+
+  .versus {
+    position: relative;
+    z-index: 1;
+    text-shadow:
+      0 0 10px currentColor,
+      0 2px 6px rgba(0, 0, 0, 0.85);
+  }
+
   .character-frame {
-    width: min(84vw, 320px);
-    height: min(76vw, 300px);
+    width: min(82vw, 312px);
+    height: min(74vw, 288px);
   }
 
   .character-frame img {
@@ -1648,27 +1677,27 @@ button {
   .character-frame[data-mood="normal"] img,
   .character-frame[data-mood="draw"] img,
   .character-frame[data-mood="win"] img {
-    height: 540%;
-    transform: translate(-50%, -22%);
+    height: 510%;
+    transform: translate(-50%, -21%);
   }
 
   .character-frame[data-mood="happy"] img,
   .character-frame[data-mood="smug"] img,
   .character-frame[data-mood="excited"] img {
-    height: 585%;
-    transform: translate(-50%, -22.5%);
+    height: 555%;
+    transform: translate(-50%, -22%);
   }
 
   .character-frame[data-mood="worried"] img,
   .character-frame[data-mood="lose"] img {
-    height: 500%;
-    transform: translate(-50%, -21.5%);
+    height: 465%;
+    transform: translate(-50%, -20%);
   }
 
   .character-frame[data-mood="panic"] img,
   .character-frame[data-mood="shocked"] img {
-    height: 560%;
-    transform: translate(-50%, -22.5%);
+    height: 535%;
+    transform: translate(-50%, -21.8%);
   }
 }
 
@@ -2053,34 +2082,63 @@ button {
 }
 
 @media (max-width: 480px) {
+  .hands::before {
+    content: "";
+    position: absolute;
+    inset: -8px -4px -4px;
+    z-index: 0;
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(0, 18, 8, 0.76), rgba(0, 0, 0, 0.62));
+    box-shadow:
+      inset 0 0 18px rgba(168, 255, 112, 0.1),
+      0 0 14px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+  }
+
+  .hand-card {
+    position: relative;
+    z-index: 1;
+    background:
+      linear-gradient(180deg, rgba(168, 255, 112, 0.1), transparent 24%, rgba(0, 0, 0, 0.34)),
+      rgba(0, 0, 0, 0.52);
+  }
+
+  .versus {
+    position: relative;
+    z-index: 1;
+    text-shadow:
+      0 0 10px currentColor,
+      0 2px 6px rgba(0, 0, 0, 0.85);
+  }
+
   .character-frame {
-    width: min(84vw, 320px);
-    height: min(76vw, 300px);
+    width: min(82vw, 312px);
+    height: min(74vw, 288px);
   }
 
   .character-frame[data-mood="normal"] img,
   .character-frame[data-mood="draw"] img,
   .character-frame[data-mood="win"] img {
-    height: 540%;
-    transform: translate(-50%, -22%);
+    height: 510%;
+    transform: translate(-50%, -21%);
   }
 
   .character-frame[data-mood="happy"] img,
   .character-frame[data-mood="smug"] img,
   .character-frame[data-mood="excited"] img {
-    height: 585%;
-    transform: translate(-50%, -22.5%);
+    height: 555%;
+    transform: translate(-50%, -22%);
   }
 
   .character-frame[data-mood="worried"] img,
   .character-frame[data-mood="lose"] img {
-    height: 500%;
-    transform: translate(-50%, -21.5%);
+    height: 465%;
+    transform: translate(-50%, -20%);
   }
 
   .character-frame[data-mood="panic"] img,
   .character-frame[data-mood="shocked"] img {
-    height: 560%;
-    transform: translate(-50%, -22.5%);
+    height: 535%;
+    transform: translate(-50%, -21.8%);
   }
 }
