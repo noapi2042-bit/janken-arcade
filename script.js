@@ -23,6 +23,11 @@ const sceneImages = {
   playerLose: "assets/images/scene_player_lose.png",
 };
 
+const imageCache = new Map();
+let characterRequestId = 0;
+let sceneCharacterRequestId = 0;
+let sceneIllustrationRequestId = 0;
+
 const DEBUG_MODE = new URLSearchParams(window.location.search).has("debug");
 const MATCH_POINT = 10;
 const CONTINUE_SECONDS = 10;
@@ -851,20 +856,110 @@ function setResultLabel(result, bonus = 1, isFinal = false) {
   }
 }
 
+function collectImageSources(sourceMap) {
+  return Object.values(sourceMap)
+    .flatMap((value) => (Array.isArray(value) ? value : [value]))
+    .filter(Boolean);
+}
+
+function preloadImage(src) {
+  if (!src) {
+    return Promise.resolve(null);
+  }
+
+  if (imageCache.has(src)) {
+    return imageCache.get(src);
+  }
+
+  const promise = new Promise((resolve) => {
+    const img = new Image();
+
+    img.onload = async () => {
+      try {
+        if (img.decode) {
+          await img.decode();
+        }
+      } catch (error) {
+        // Decoding can fail on some browsers even after load; keep the loaded image.
+      }
+
+      resolve(img);
+    };
+
+    img.onerror = () => {
+      console.warn("Image not found:", src);
+      resolve(null);
+    };
+
+    img.src = src;
+  });
+
+  imageCache.set(src, promise);
+  return promise;
+}
+
+function preloadImages(sourceMap) {
+  collectImageSources(sourceMap).forEach((src) => {
+    preloadImage(src);
+  });
+}
+
+function preloadCharacterImages() {
+  preloadImages(characterImages);
+}
+
+function preloadSceneImages() {
+  preloadImages(sceneImages);
+}
+
+function imageSourceFor(sourceMap, key, fallbackKey = "normal") {
+  const value = sourceMap[key] || sourceMap[fallbackKey];
+  return Array.isArray(value) ? value[0] : value;
+}
+
 function setCharacter(mood) {
-  const characterMood = mood || "normal";
-  characterFrame.dataset.mood = characterImages[characterMood] ? characterMood : "normal";
-  characterImage.src = characterImages[characterMood] || characterImages.normal;
-  characterImage.hidden = false;
-  characterFallback.hidden = true;
+  const characterMood = characterImages[mood] ? mood : "normal";
+  const src = imageSourceFor(characterImages, characterMood);
+  const requestId = ++characterRequestId;
+
+  characterFrame.dataset.mood = characterMood;
+
+  preloadImage(src).then((img) => {
+    if (requestId !== characterRequestId) {
+      return;
+    }
+
+    if (!img) {
+      useFallbackCharacter();
+      return;
+    }
+
+    characterImage.src = src;
+    characterImage.hidden = false;
+    characterFallback.hidden = true;
+  });
 }
 
 function setSceneCharacter(mood) {
+  const requestId = ++sceneCharacterRequestId;
+  const src = imageSourceFor(characterImages, mood);
   sceneOverlay.classList.remove("has-illustration");
   sceneIllustration.hidden = true;
-  sceneCharacterImage.src = characterImages[mood] || characterImages.normal;
-  sceneCharacterImage.hidden = false;
-  sceneCharacterFallback.hidden = true;
+
+  preloadImage(src).then((img) => {
+    if (requestId !== sceneCharacterRequestId) {
+      return;
+    }
+
+    if (!img) {
+      useFallbackSceneCharacter();
+      return;
+    }
+
+    sceneCharacterImage.src = src;
+    sceneCharacterImage.hidden = false;
+    sceneCharacterFallback.hidden = true;
+  });
 }
 
 function useFallbackCharacter() {
@@ -886,7 +981,8 @@ function fallbackSceneIllustration() {
 }
 
 function setSceneIllustration(sceneType, fallbackMood = "normal") {
-  const src = sceneImages[sceneType];
+  const src = imageSourceFor(sceneImages, sceneType, sceneType);
+  const requestId = ++sceneIllustrationRequestId;
   sceneOverlay.dataset.fallbackMood = fallbackMood;
 
   if (!src) {
@@ -895,10 +991,22 @@ function setSceneIllustration(sceneType, fallbackMood = "normal") {
   }
 
   sceneOverlay.classList.add("has-illustration");
-  sceneIllustration.src = src;
-  sceneIllustration.hidden = false;
   sceneCharacterImage.hidden = true;
   sceneCharacterFallback.hidden = true;
+
+  preloadImage(src).then((img) => {
+    if (requestId !== sceneIllustrationRequestId) {
+      return;
+    }
+
+    if (!img) {
+      fallbackSceneIllustration();
+      return;
+    }
+
+    sceneIllustration.src = src;
+    sceneIllustration.hidden = false;
+  });
 }
 
 async function showCharacterScene(mood, text, duration = 2200) {
@@ -1410,6 +1518,9 @@ document.querySelectorAll(".choice-hand-image").forEach((image) => {
 });
 
 useFallbackCharacter();
+preloadCharacterImages();
+preloadSceneImages();
+setCharacter("normal");
 AudioManager.initAudio();
 AudioManager.updateMuteButton();
 if (DEBUG_MODE) {

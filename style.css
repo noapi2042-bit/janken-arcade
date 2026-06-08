@@ -1635,6 +1635,12 @@ button {
   }
 }
 
+@media (max-width: 480px) {
+  .character-frame img {
+    transition: height 0.12s ease, transform 0.12s ease;
+  }
+}
+
 @media (max-height: 760px) {
   .mute-button {
     top: 72px;
