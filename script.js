@@ -6,15 +6,15 @@ const hands = {
 
 const characterImages = {
   normal: "assets/images/character_normal.png",
-  win: "assets/images/character_win.png",
+  win: "assets/images/character_happy.png",
   lose: "assets/images/character_lose.png",
-  draw: "assets/images/character_draw.png",
+  draw: "assets/images/character_normal.png",
   happy: "assets/images/character_happy.png",
   smug: "assets/images/character_smug.png",
   worried: "assets/images/character_worried.png",
   panic: "assets/images/character_panic.png",
   excited: "assets/images/character_excited.png",
-  shocked: "assets/images/character_shocked.png",
+  shocked: "assets/images/character_panic.png",
 };
 
 const sceneImages = {
@@ -23,10 +23,32 @@ const sceneImages = {
   playerLose: "assets/images/scene_player_lose.png",
 };
 
+const galleryItems = [
+  { title: "Normal", src: "assets/images/character_normal.png", type: "character" },
+  { title: "Happy", src: "assets/images/character_happy.png", type: "character" },
+  { title: "Smug", src: "assets/images/character_smug.png", type: "character" },
+  { title: "Worried", src: "assets/images/character_worried.png", type: "character" },
+  { title: "Panic", src: "assets/images/character_panic.png", type: "character" },
+  { title: "Excited", src: "assets/images/character_excited.png", type: "character" },
+  { title: "Lose", src: "assets/images/character_lose.png", type: "character" },
+  { title: "Opening Scene", src: "assets/images/scene_intro.png", type: "scene" },
+  { title: "Player Win Scene", src: "assets/images/scene_player_win.png", type: "scene" },
+  { title: "Player Lose Scene", src: "assets/images/scene_player_lose.png", type: "scene" },
+];
+
 const imageCache = new Map();
 let characterRequestId = 0;
 let sceneCharacterRequestId = 0;
 let sceneIllustrationRequestId = 0;
+let resultLabelTimer = null;
+let startupAssetsReady = null;
+let messageTypingTimer = null;
+let messageTypingId = 0;
+let characterBeatId = 0;
+let cutInTimer = null;
+let galleryIndex = 0;
+let galleryRequestId = 0;
+let galleryPreloadQueued = false;
 
 const DEBUG_MODE = new URLSearchParams(window.location.search).has("debug");
 const MATCH_POINT = 10;
@@ -40,6 +62,7 @@ const CHANCE_ENTRY_LINES = ["チャンスタイム！", "勝敗2倍だよ！", "
 const DRAW_WARNING_LINES = ["なんか続いてるね…？", "空気が変わったかも…", "そろそろ動くかも？"];
 const FINAL_JANKEN_ENTRY_LINES = ["ファイナルじゃんけん！", "次に勝った方が勝ち！", "ここで全部決まるよ！"];
 const FINAL_JANKEN_IDLE_LINES = ["次で決まるよ…！", "勝った方が勝ち！", "最後の勝負だよ！"];
+const FINAL_CONFIRM_LINES = ["本当にそれでいく？", "同じ手でもう一度！", "それで決める？"];
 const PSYCH_EVENT_CHANCE = 0.12;
 const HAND_NAMES = {
   rock: "グー",
@@ -129,6 +152,7 @@ const state = {
   chance: false,
   drawWarningShown: false,
   finalJanken: false,
+  finalConfirmHand: null,
   psychEvent: null,
   nextCallMode: "normal",
   countdownTimer: null,
@@ -137,13 +161,19 @@ const state = {
   debugForceNextResult: null,
   debugPanelVisible: false,
   debugSoundTaps: [],
+  galleryUnlockedSession: false,
+  galleryJustUnlocked: false,
+  inputGuideShownOnce: false,
+  inputGuideVisible: false,
   lastLine: "",
   flowId: 0,
 };
 
 const cabinet = document.querySelector(".cabinet");
 const startButton = document.querySelector("#startButton");
+const galleryButton = document.querySelector("#galleryButton");
 const choiceButtons = document.querySelectorAll(".choice");
+const inputGuide = document.querySelector("#inputGuide");
 const message = document.querySelector("#message");
 const playerHand = document.querySelector("#playerHand");
 const cpuHand = document.querySelector("#cpuHand");
@@ -159,6 +189,13 @@ const sceneIllustration = document.querySelector("#sceneIllustration");
 const sceneCharacterImage = document.querySelector("#sceneCharacterImage");
 const sceneCharacterFallback = document.querySelector("#sceneCharacterFallback");
 const sceneMessage = document.querySelector("#sceneMessage");
+const galleryOverlay = document.querySelector("#galleryOverlay");
+const galleryImage = document.querySelector("#galleryImage");
+const galleryCaption = document.querySelector("#galleryCaption");
+const galleryCounter = document.querySelector("#galleryCounter");
+const galleryCloseButton = document.querySelector("#galleryCloseButton");
+const galleryPrevButton = document.querySelector("#galleryPrevButton");
+const galleryNextButton = document.querySelector("#galleryNextButton");
 const winCount = document.querySelector("#winCount");
 const loseCount = document.querySelector("#loseCount");
 const drawCount = document.querySelector("#drawCount");
@@ -178,12 +215,17 @@ const AudioManager = (() => {
     chance: 0.3,
     final: 0.32,
   };
+  const sfxPaths = {
+    cutin: "assets/sounds/cutin_stinger.mp3",
+  };
   let context = null;
   let normalBgm = null;
   let chanceBgm = null;
   let finalBgm = null;
+  let cutinSfx = null;
   let finalBgmFailed = false;
   let currentBgmMode = null;
+  let lastCutinSfxAt = 0;
   let muted = false;
 
   function initAudio() {
@@ -221,7 +263,7 @@ const AudioManager = (() => {
     const audio = new Audio(bgmPaths[mode]);
     audio.loop = true;
     audio.volume = bgmVolumes[mode];
-    audio.preload = "none";
+    audio.preload = mode === "normal" ? "metadata" : "none";
     audio.addEventListener(
       "error",
       () => {
@@ -233,6 +275,20 @@ const AudioManager = (() => {
             switchBgm("chance");
           }
         }
+      },
+      { once: true }
+    );
+    return audio;
+  }
+
+  function createCutinSfx() {
+    const audio = new Audio(sfxPaths.cutin);
+    audio.preload = "metadata";
+    audio.volume = 0.66;
+    audio.addEventListener(
+      "error",
+      () => {
+        console.warn("Cut-in SFX not found: assets/sounds/cutin_stinger.mp3");
       },
       { once: true }
     );
@@ -371,10 +427,15 @@ const AudioManager = (() => {
       const patterns = {
         start: [[520, 0, 0.08], [780, 0.08, 0.1], [1040, 0.18, 0.12]],
         select: [[880, 0, 0.055]],
-        reveal: [[180, 0, 0.075, { to: 95, volume: 0.55 }], [520, 0.02, 0.08, { volume: 0.25 }]],
+        call1: [[360, 0, 0.045, { volume: 0.28 }]],
+        call2: [[520, 0, 0.045, { volume: 0.3 }]],
+        call3: [[760, 0, 0.065, { volume: 0.34 }], [1120, 0, 0.035, { volume: 0.12, type: "triangle" }]],
+        textBlip: [[560, 0, 0.024, { volume: 0.1, type: "square" }]],
+        handPop: [[920, 0, 0.032, { volume: 0.16 }]],
+        reveal: [[920, 0, 0.032, { volume: 0.16 }]],
         win: [[560, 0, 0.08], [760, 0.08, 0.08], [1020, 0.16, 0.16, { volume: 0.5 }]],
-        lose: [[180, 0, 0.14, { to: 95, volume: 0.46, type: "sawtooth" }], [120, 0.15, 0.12, { volume: 0.36 }]],
-        draw: [[420, 0, 0.08], [420, 0.11, 0.08, { volume: 0.34 }]],
+        lose: [[380, 0, 0.15, { to: 220, volume: 0.28, type: "triangle" }]],
+        draw: [[440, 0, 0.055, { volume: 0.24 }], [620, 0.16, 0.07, { volume: 0.28 }]],
         chance: [[520, 0, 0.06], [760, 0.07, 0.06], [1040, 0.14, 0.1], [1320, 0.25, 0.18, { volume: 0.5 }]],
         youwin: [[660, 0, 0.1], [880, 0.11, 0.1], [1320, 0.22, 0.25, { volume: 0.52 }]],
         continue: [[330, 0, 0.09], [440, 0.12, 0.09], [330, 0.24, 0.13, { volume: 0.46 }]],
@@ -390,6 +451,32 @@ const AudioManager = (() => {
     }
   }
 
+  function playCutinSfx() {
+    try {
+      if (muted) {
+        return;
+      }
+
+      initAudio();
+      if (!cutinSfx) {
+        cutinSfx = createCutinSfx();
+      }
+
+      const now = Date.now();
+      if (now - lastCutinSfxAt < 700) {
+        return;
+      }
+
+      lastCutinSfxAt = now;
+      cutinSfx.pause();
+      cutinSfx.currentTime = 0;
+      cutinSfx.volume = 0.66;
+      cutinSfx.play().catch(() => {});
+    } catch (error) {
+      // Cut-in sound is optional.
+    }
+  }
+
   function setMuted(value) {
     muted = Boolean(value);
     try {
@@ -400,6 +487,14 @@ const AudioManager = (() => {
 
     if (muted) {
       stopBgm();
+      if (cutinSfx) {
+        try {
+          cutinSfx.pause();
+          cutinSfx.currentTime = 0;
+        } catch (error) {
+          // Cut-in sound is optional.
+        }
+      }
     } else {
       resumeContext();
       if (state.started && !state.ended) {
@@ -429,6 +524,7 @@ const AudioManager = (() => {
     switchBgm,
     stopBgm,
     playSound,
+    playCutinSfx,
     setMuted,
     toggleMute,
     updateMuteButton,
@@ -441,10 +537,301 @@ function wait(ms) {
   });
 }
 
+function scheduleIdleTask(callback, delay = 600) {
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(callback, { timeout: 2000 });
+    return;
+  }
+
+  window.setTimeout(callback, delay);
+}
+
+function restartClassAnimation(element, className) {
+  if (!element) {
+    return;
+  }
+
+  const token = String((Number(element.dataset.animationToken) || 0) + 1);
+  element.dataset.animationToken = token;
+  element.classList.remove(className);
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      if (element.dataset.animationToken !== token) {
+        return;
+      }
+
+      element.classList.add(className);
+    });
+  });
+}
+
+function cancelClassAnimation(element, className) {
+  if (!element) {
+    return;
+  }
+
+  element.dataset.animationToken = String((Number(element.dataset.animationToken) || 0) + 1);
+  element.classList.remove(className);
+}
+
+function playCharacterBeat(className) {
+  if (!characterFrame) {
+    return;
+  }
+
+  const token = String(characterBeatId + 1);
+  characterBeatId += 1;
+  characterFrame.dataset.beatToken = token;
+  characterFrame.classList.remove("is-beat-1", "is-beat-2", "is-beat-3");
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      if (characterFrame.dataset.beatToken !== token) {
+        return;
+      }
+
+      characterFrame.classList.add(className);
+    });
+  });
+}
+
+function clearCharacterBeat() {
+  if (!characterFrame) {
+    return;
+  }
+
+  characterBeatId += 1;
+  characterFrame.dataset.beatToken = String(characterBeatId);
+  characterFrame.classList.remove("is-beat-1", "is-beat-2", "is-beat-3");
+}
+
+function clearCinematicCutIn() {
+  if (cutInTimer) {
+    window.clearTimeout(cutInTimer);
+    cutInTimer = null;
+  }
+
+  cabinet.classList.remove("is-cinematic-cutin", "cutin-psych", "cutin-chance", "cutin-final");
+}
+
+function triggerCinematicCutIn(type) {
+  if (!cabinet) {
+    return;
+  }
+
+  const cutInDurations = {
+    psych: 1200,
+    chance: 1500,
+    final: 1800,
+  };
+
+  clearCinematicCutIn();
+  cabinet.classList.add("is-cinematic-cutin", `cutin-${type}`);
+
+  if (["psych", "chance", "final"].includes(type)) {
+    AudioManager.playCutinSfx();
+  }
+
+  cutInTimer = window.setTimeout(() => {
+    clearCinematicCutIn();
+  }, cutInDurations[type] || 1300);
+}
+
 function setButtonsEnabled(enabled) {
   choiceButtons.forEach((button) => {
     button.disabled = !enabled;
   });
+}
+
+function showInputGuideOnce() {
+  if (!inputGuide || state.inputGuideShownOnce || state.inputGuideVisible || !state.started || state.busy || state.ended) {
+    return;
+  }
+
+  state.inputGuideVisible = true;
+  inputGuide.hidden = false;
+}
+
+function hideInputGuide(markShown = true) {
+  if (markShown) {
+    state.inputGuideShownOnce = true;
+  }
+
+  state.inputGuideVisible = false;
+
+  if (inputGuide) {
+    inputGuide.hidden = true;
+  }
+}
+
+function showFinalChoiceConfirm(hand) {
+  stopChanceMessages();
+  setSelectedButton(hand);
+  setCharacter("excited");
+  triggerCinematicCutIn("final");
+  AudioManager.playSound("select");
+  showMessage(`${handName(hand)}でいく？ ${randomLine(FINAL_CONFIRM_LINES)}`, "is-result is-final-entry is-final-confirm", {
+    typewriter: true,
+    maxDuration: 620,
+  });
+}
+
+function handleChoiceButtonClick(hand) {
+  if (!hand) {
+    return;
+  }
+
+  hideInputGuide();
+
+  if (state.finalJanken && !state.busy && !state.ended) {
+    if (state.finalConfirmHand === hand) {
+      state.finalConfirmHand = null;
+      cabinet.classList.remove("is-final-confirm");
+      playRound(hand);
+      return;
+    }
+
+    state.finalConfirmHand = hand;
+    showFinalChoiceConfirm(hand);
+    return;
+  }
+
+  state.finalConfirmHand = null;
+  cabinet.classList.remove("is-final-confirm");
+  playRound(hand);
+}
+
+function isGalleryUnlocked() {
+  return Boolean(state.galleryUnlockedSession);
+}
+
+function scheduleGalleryPreload() {
+  if (galleryPreloadQueued) {
+    return;
+  }
+
+  galleryPreloadQueued = true;
+  scheduleIdleTask(() => {
+    collectImageSources({ gallery: galleryItems.map((item) => item.src) }).forEach((src) => {
+      preloadImage(src);
+    });
+  }, 900);
+}
+
+function updateGalleryButton() {
+  if (!galleryButton) {
+    return;
+  }
+
+  const shouldShow = isGalleryUnlocked() && !state.started && !state.busy && !state.ended;
+  galleryButton.hidden = !shouldShow;
+
+  if (shouldShow) {
+    scheduleGalleryPreload();
+  }
+
+  if (shouldShow && state.galleryJustUnlocked) {
+    galleryButton.classList.add("is-new");
+    window.setTimeout(() => {
+      galleryButton.classList.remove("is-new");
+    }, 4200);
+    state.galleryJustUnlocked = false;
+  }
+}
+
+function unlockGallery() {
+  const wasUnlocked = isGalleryUnlocked();
+  state.galleryUnlockedSession = true;
+
+  if (!wasUnlocked) {
+    state.galleryJustUnlocked = true;
+  }
+
+  updateGalleryButton();
+}
+
+function lockGallery() {
+  state.galleryUnlockedSession = false;
+  state.galleryJustUnlocked = false;
+  closeGallery(false);
+  updateGalleryButton();
+}
+
+function renderGalleryItem() {
+  if (!galleryImage || !galleryCaption || !galleryCounter || !galleryItems.length) {
+    return;
+  }
+
+  const item = galleryItems[galleryIndex];
+  const requestId = ++galleryRequestId;
+  galleryCaption.textContent = item.title;
+  galleryCounter.textContent = `${galleryIndex + 1} / ${galleryItems.length}`;
+  galleryImage.hidden = true;
+
+  preloadImage(item.src).then((img) => {
+    if (requestId !== galleryRequestId) {
+      return;
+    }
+
+    if (!img) {
+      galleryCaption.textContent = `${item.title} / COMING SOON`;
+      galleryImage.hidden = true;
+      return;
+    }
+
+    galleryImage.src = item.src;
+    galleryImage.alt = item.title;
+    galleryImage.dataset.type = item.type;
+    galleryImage.hidden = false;
+  });
+}
+
+function openGallery() {
+  if (
+    !isGalleryUnlocked() ||
+    !galleryOverlay ||
+    !startButton ||
+    startButton.hidden ||
+    state.started ||
+    state.busy ||
+    state.ended
+  ) {
+    return;
+  }
+
+  galleryIndex = 0;
+  galleryOverlay.hidden = false;
+  cabinet.classList.add("is-gallery-open");
+  startButton.disabled = true;
+  renderGalleryItem();
+  AudioManager.playSound("select");
+}
+
+function closeGallery(playSound = true) {
+  if (!galleryOverlay) {
+    return;
+  }
+
+  galleryOverlay.hidden = true;
+  cabinet.classList.remove("is-gallery-open");
+  galleryRequestId += 1;
+  if (!state.started && !state.busy && !state.ended) {
+    startButton.disabled = false;
+  }
+
+  if (playSound) {
+    AudioManager.playSound("select");
+  }
+}
+
+function moveGallery(step) {
+  if (!galleryOverlay || galleryOverlay.hidden || !galleryItems.length) {
+    return;
+  }
+
+  galleryIndex = (galleryIndex + step + galleryItems.length) % galleryItems.length;
+  renderGalleryItem();
+  AudioManager.playSound("select");
 }
 
 function toggleDebugMode(force) {
@@ -483,8 +870,13 @@ function createDebugPanel() {
     ["FORCE WARNING", debugForceWarning],
     ["FORCE CHANCE", debugForceChance],
     ["FORCE FINAL", debugForceFinal],
+    ["PSYCH CUTIN", () => triggerCinematicCutIn("psych")],
+    ["CHANCE CUTIN", () => triggerCinematicCutIn("chance")],
+    ["FINAL CUTIN", () => triggerCinematicCutIn("final")],
     ["NEXT PLAYER WIN", () => debugForceNextResult("win")],
     ["NEXT CPU WIN", () => debugForceNextResult("lose")],
+    ["UNLOCK GALLERY", unlockGallery],
+    ["LOCK GALLERY", lockGallery],
     ["RESET DEBUG", debugReset],
   ].forEach(([label, handler]) => {
     const button = document.createElement("button");
@@ -515,9 +907,11 @@ function debugForceWarning() {
 function debugForceChance() {
   state.draw = Math.max(state.draw, CHANCE_DRAW_COUNT);
   state.drawWarningShown = true;
+  state.finalConfirmHand = null;
   setChanceMode(true);
   updateScore();
   setCharacter("excited");
+  triggerCinematicCutIn("chance");
   AudioManager.switchBgm("chance");
   showMessage(randomLine(CHANCE_ENTRY_LINES), "is-result is-draw player-draw is-chance-entry");
 }
@@ -525,10 +919,12 @@ function debugForceChance() {
 function debugForceFinal() {
   state.draw = Math.max(state.draw, FINAL_DRAW_COUNT);
   state.drawWarningShown = true;
+  state.finalConfirmHand = null;
   setChanceMode(true);
   setFinalJankenMode(true);
   updateScore();
   setCharacter("excited");
+  triggerCinematicCutIn("final");
   AudioManager.switchBgm("final");
   showMessage(randomLine(FINAL_JANKEN_ENTRY_LINES), "is-result is-draw player-draw is-final-entry");
 }
@@ -540,6 +936,7 @@ function debugForceNextResult(result) {
 
 function debugReset() {
   state.debugForceNextResult = null;
+  state.finalConfirmHand = null;
   resetScore();
   resetRoundView();
   if (state.started && !state.ended) {
@@ -589,6 +986,11 @@ function setChanceMode(enabled) {
 function setFinalJankenMode(enabled) {
   state.finalJanken = enabled;
   cabinet.classList.toggle("is-final-janken", enabled);
+
+  if (!enabled) {
+    state.finalConfirmHand = null;
+    cabinet.classList.remove("is-final-confirm");
+  }
 }
 
 function setStageMood(mood) {
@@ -604,7 +1006,8 @@ function setStageMood(mood) {
     "is-double",
     "is-chance-entry",
     "is-draw-warning",
-    "is-final-entry"
+    "is-final-entry",
+    "is-final-confirm"
   );
 
   if (mood) {
@@ -709,35 +1112,104 @@ function maybeStartPsychEvent() {
   state.psychEvent = { type, cpuHand, requestedHand };
 
   setCharacter(type === "predict" ? "smug" : "happy");
-  showMessage(psychEventLine(state.psychEvent));
+  triggerCinematicCutIn("psych");
+  showMessage(psychEventLine(state.psychEvent), undefined, { typewriter: true });
   return true;
 }
 
 function showNextInputPrompt() {
   if (maybeStartPsychEvent()) {
+    showInputGuideOnce();
     return;
   }
 
   if (state.chance) {
     startChanceMessages();
   } else {
-    showMessage(lineFor("idle"));
+    showMessage(lineFor("idle"), undefined, { typewriter: true });
   }
+
+  showInputGuideOnce();
 }
 
 function updateCharacterByScore() {
   setCharacter(currentDialogue().image || "normal");
 }
 
-function showMessage(text, mood) {
+function cancelMessageTyping() {
+  messageTypingId += 1;
+  if (messageTypingTimer) {
+    window.clearTimeout(messageTypingTimer);
+    messageTypingTimer = null;
+  }
+}
+
+function shouldPlayTextBlip(char, index) {
+  if (!char || /\s/.test(char)) {
+    return false;
+  }
+
+  if ("。、！？!?…♪・,.:-/".includes(char)) {
+    return false;
+  }
+
+  return index % 3 === 1;
+}
+
+function typeMessage(text, options = {}) {
+  cancelMessageTyping();
+
+  const fullText = text || "いくよ！";
+  const typingId = messageTypingId;
+  const maxDuration = options.maxDuration ?? 700;
+  const baseSpeed = options.speed ?? (fullText.length > 18 ? 16 : 22);
+  const speed = Math.max(10, Math.min(baseSpeed, Math.floor(maxDuration / Math.max(fullText.length, 1))));
+  const sound = options.sound !== false;
+  let index = 0;
+
+  message.textContent = "";
+
+  function step() {
+    if (typingId !== messageTypingId) {
+      return;
+    }
+
+    index += 1;
+    message.textContent = fullText.slice(0, index);
+
+    const char = fullText[index - 1];
+    if (sound && shouldPlayTextBlip(char, index)) {
+      AudioManager.playSound("textBlip");
+    }
+
+    if (index < fullText.length) {
+      messageTypingTimer = window.setTimeout(step, speed);
+    } else {
+      messageTypingTimer = null;
+    }
+  }
+
+  step();
+}
+
+function showMessage(text, mood, options = {}) {
   message.textContent = text || "いくよ！";
   setStageMood(mood);
 
   if (mood === "is-calling") {
-    message.style.animation = "none";
-    message.offsetHeight;
-    message.style.animation = "";
+    cancelMessageTyping();
+    restartClassAnimation(message, "is-message-pop");
+    return;
   }
+
+  cancelClassAnimation(message, "is-message-pop");
+
+  if (options.typewriter) {
+    typeMessage(text, options);
+    return;
+  }
+
+  cancelMessageTyping();
 }
 
 function stopChanceMessages() {
@@ -762,10 +1234,12 @@ async function showIntroThenReady() {
   updateCharacterByScore();
   if (maybeStartPsychEvent()) {
     setButtonsEnabled(true);
+    showInputGuideOnce();
     return;
   }
   showMessage("えらべ！");
   setButtonsEnabled(true);
+  showInputGuideOnce();
 }
 
 function startChanceMessages() {
@@ -775,10 +1249,10 @@ function startChanceMessages() {
 
   stopChanceMessages();
   if (state.finalJanken) {
-    showMessage(randomLine(FINAL_JANKEN_IDLE_LINES));
+    showMessage(randomLine(FINAL_JANKEN_IDLE_LINES), undefined, { typewriter: true });
   } else {
     state.chanceMessageIndex %= CHANCE_MESSAGES.length;
-    showMessage(lineFor("idle"));
+    showMessage(lineFor("idle"), undefined, { typewriter: true });
   }
 
   state.chanceMessageTimer = window.setInterval(() => {
@@ -788,10 +1262,10 @@ function startChanceMessages() {
     }
 
     if (state.finalJanken) {
-      showMessage(randomLine(FINAL_JANKEN_IDLE_LINES));
+      showMessage(randomLine(FINAL_JANKEN_IDLE_LINES), undefined, { typewriter: true });
     } else {
       state.chanceMessageIndex = (state.chanceMessageIndex + 1) % CHANCE_MESSAGES.length;
-      showMessage(lineFor("idle"));
+      showMessage(lineFor("idle"), undefined, { typewriter: true });
     }
   }, 2000);
 }
@@ -803,6 +1277,7 @@ async function showFinalJankenEntry() {
   setSelectedButton();
 
   setCharacter("excited");
+  triggerCinematicCutIn("final");
   AudioManager.playSound("chance");
   AudioManager.switchBgm("final");
   showMessage("ファイナルじゃんけん！", "is-result is-draw player-draw is-final-entry");
@@ -823,13 +1298,28 @@ async function showFinalJankenEntry() {
   renderHand(playerHand, null);
   renderHand(cpuHand, null);
   setResultLabel();
+  state.finalConfirmHand = null;
   showMessage("えらべ！");
   state.busy = false;
   setButtonsEnabled(true);
 }
 
+function clearResultLabelTimer() {
+  if (resultLabelTimer) {
+    window.clearTimeout(resultLabelTimer);
+    resultLabelTimer = null;
+  }
+}
+
+function clearResultLabel() {
+  clearResultLabelTimer();
+  resultLabel.classList.remove("is-visible", "is-win", "is-lose", "is-draw", "is-double", "is-final", "is-hiding");
+  resultLabel.textContent = "";
+}
+
 function setResultLabel(result, bonus = 1, isFinal = false) {
-  resultLabel.classList.remove("is-visible", "is-win", "is-lose", "is-draw", "is-double", "is-final");
+  clearResultLabelTimer();
+  resultLabel.classList.remove("is-visible", "is-win", "is-lose", "is-draw", "is-double", "is-final", "is-hiding");
 
   if (!result) {
     resultLabel.textContent = "";
@@ -838,8 +1328,9 @@ function setResultLabel(result, bonus = 1, isFinal = false) {
 
   const label = result.toUpperCase();
   const showDouble = !isFinal && bonus > 1 && result !== "draw";
+  const showFinal = isFinal && result !== "draw";
 
-  if (isFinal && result !== "draw") {
+  if (showFinal) {
     resultLabel.textContent = `FINAL ${label}`;
   } else if (showDouble) {
     resultLabel.textContent = `${label} +2`;
@@ -849,17 +1340,29 @@ function setResultLabel(result, bonus = 1, isFinal = false) {
 
   resultLabel.classList.add("is-visible", `is-${result}`);
 
-  if (isFinal && result !== "draw") {
+  if (showFinal) {
     resultLabel.classList.add("is-final");
   } else if (showDouble) {
     resultLabel.classList.add("is-double");
   }
+
+  const holdMs = showFinal ? 1650 : showDouble ? 1300 : 1000;
+  resultLabelTimer = window.setTimeout(() => {
+    resultLabel.classList.add("is-hiding");
+    resultLabelTimer = window.setTimeout(() => {
+      clearResultLabel();
+    }, 260);
+  }, holdMs);
 }
 
 function collectImageSources(sourceMap) {
-  return Object.values(sourceMap)
-    .flatMap((value) => (Array.isArray(value) ? value : [value]))
-    .filter(Boolean);
+  return [
+    ...new Set(
+      Object.values(sourceMap)
+        .flatMap((value) => (Array.isArray(value) ? value : [value]))
+        .filter(Boolean)
+    ),
+  ];
 }
 
 function preloadImage(src) {
@@ -910,6 +1413,24 @@ function preloadCharacterImages() {
 
 function preloadSceneImages() {
   preloadImages(sceneImages);
+}
+
+function preloadStartupAssets() {
+  if (startupAssetsReady) {
+    return startupAssetsReady;
+  }
+
+  const sources = [
+    sceneImages.intro,
+    characterImages.normal,
+    characterImages.happy,
+    hands.rock.image,
+    hands.scissors.image,
+    hands.paper.image,
+  ].filter(Boolean);
+
+  startupAssetsReady = Promise.allSettled(sources.map((src) => preloadImage(src)));
+  return startupAssetsReady;
 }
 
 function imageSourceFor(sourceMap, key, fallbackKey = "normal") {
@@ -1041,7 +1562,10 @@ async function showIllustrationScene(sceneType, text, duration = 3500, fallbackM
 
 function renderHand(target, handKey) {
   const hand = hands[handKey];
-  target.classList.remove("has-hand-image", "is-hand-pop");
+  const handCard = target.closest(".hand-card");
+  cancelClassAnimation(handCard, "is-hand-pop-frame");
+  cancelClassAnimation(target, "is-hand-pop");
+  target.classList.remove("has-hand-image");
   target.replaceChildren();
 
   if (!hand) {
@@ -1056,7 +1580,9 @@ function renderHand(target, handKey) {
   image.addEventListener(
     "error",
     () => {
-      target.classList.remove("has-hand-image", "is-hand-pop");
+      cancelClassAnimation(handCard, "is-hand-pop-frame");
+      cancelClassAnimation(target, "is-hand-pop");
+      target.classList.remove("has-hand-image");
       target.textContent = hand.symbol;
     },
     { once: true }
@@ -1065,20 +1591,21 @@ function renderHand(target, handKey) {
     "animationend",
     () => {
       target.classList.remove("is-hand-pop");
+      handCard?.classList.remove("is-hand-pop-frame");
     },
     { once: true }
   );
   target.classList.add("has-hand-image");
   target.append(image);
-  target.offsetHeight;
-  target.classList.add("is-hand-pop");
+  restartClassAnimation(handCard, "is-hand-pop-frame");
+  restartClassAnimation(target, "is-hand-pop");
 }
 
 function resetRoundView() {
   renderHand(playerHand, null);
   renderHand(cpuHand, null);
   setSelectedButton();
-  setResultLabel();
+  clearResultLabel();
   setStageMood();
   updateCharacterByScore();
 }
@@ -1163,10 +1690,12 @@ function cancelEndFlow() {
 }
 
 function resetScore() {
+  clearCinematicCutIn();
   state.win = 0;
   state.lose = 0;
   state.draw = 0;
   state.drawWarningShown = false;
+  state.finalConfirmHand = null;
   state.psychEvent = null;
   state.nextCallMode = "normal";
   state.lastLine = "";
@@ -1175,19 +1704,43 @@ function resetScore() {
   updateScore();
 }
 
-function showTitle() {
+function cleanupForTitle() {
   stopCountdown();
   stopChanceMessages();
+  clearCinematicCutIn();
+  cancelMessageTyping();
+  clearResultLabel();
+  clearCharacterBeat();
+  hideInputGuide(false);
+  state.finalConfirmHand = null;
+  setSelectedButton();
+  setButtonsEnabled(false);
+  renderHand(playerHand, null);
+  renderHand(cpuHand, null);
+  setStageMood();
+
+  endOverlay.hidden = true;
+  sceneOverlay.hidden = true;
+  sceneOverlay.classList.remove("has-illustration");
+  sceneIllustration.hidden = true;
+  closeGallery(false);
+  cabinet.classList.remove("is-scene", "scene-intro", "scene-playerWin", "scene-playerLose", "is-playing", "is-ended", "end-win", "end-lose");
+}
+
+function showTitle() {
   AudioManager.stopBgm();
   state.started = false;
   state.busy = false;
   state.ended = false;
-  cabinet.classList.remove("is-playing", "is-ended", "end-win", "end-lose");
-  endOverlay.hidden = true;
+  state.psychEvent = null;
+  state.nextCallMode = "normal";
+  startButton.hidden = false;
+  startButton.disabled = false;
+  cleanupForTitle();
   resetScore();
-  resetRoundView();
-  showMessage("");
-  setButtonsEnabled(false);
+  setCharacter("normal");
+  showMessage("TAP START");
+  updateGalleryButton();
 }
 
 async function returnToTitleWithBlackout() {
@@ -1226,7 +1779,7 @@ async function showGameOverThenTitle() {
   cabinet.classList.remove("end-win");
   cabinet.classList.add("end-lose");
   setCharacter("win");
-  showMessage(randomLine(dialogue.cpuLeadBig.cpuWin), "is-result is-win");
+  showMessage(randomLine(dialogue.cpuLeadBig.cpuWin), "is-result is-win", { typewriter: true });
 
   await wait(2400);
 
@@ -1272,9 +1825,10 @@ async function endGame(result) {
   endOverlay.hidden = false;
 
   if (result === "win") {
+    unlockGallery();
     AudioManager.playSound("youwin");
     setCharacter("panic");
-    showMessage(randomLine(dialogue.playerLeadBig.cpuLose), "is-result is-lose");
+    showMessage(randomLine(dialogue.playerLeadBig.cpuLose), "is-result is-lose", { typewriter: true });
     await wait(2400);
 
     if (flowId !== state.flowId) {
@@ -1291,7 +1845,7 @@ async function endGame(result) {
 
   setCharacter("smug");
   AudioManager.playSound("continue");
-  showMessage(randomLine(dialogue.cpuLeadBig.cpuWin), "is-result is-win");
+  showMessage(randomLine(dialogue.cpuLeadBig.cpuWin), "is-result is-win", { typewriter: true });
   startContinueCountdown();
 }
 
@@ -1300,10 +1854,22 @@ function restartMatch() {
   AudioManager.switchBgm("normal");
   AudioManager.playSound("start");
   cancelEndFlow();
+  clearCinematicCutIn();
+  cancelMessageTyping();
+  clearResultLabel();
+  clearCharacterBeat();
+  hideInputGuide(false);
+  state.finalConfirmHand = null;
+  closeGallery(false);
   endOverlay.hidden = true;
+  sceneOverlay.hidden = true;
+  sceneOverlay.classList.remove("has-illustration");
+  sceneIllustration.hidden = true;
   state.started = true;
+  state.busy = false;
   state.ended = false;
-  cabinet.classList.remove("is-ended", "end-win", "end-lose");
+  cabinet.classList.remove("is-scene", "scene-intro", "scene-playerWin", "scene-playerLose", "is-ended", "end-win", "end-lose");
+  updateGalleryButton();
   resetScore();
   showIntroThenReady();
 }
@@ -1364,13 +1930,47 @@ async function startGame() {
     return;
   }
 
+  if (DEBUG_MODE) {
+    console.time("startGame");
+  }
+
+  state.busy = true;
+  startButton.disabled = true;
+  closeGallery(false);
+  endOverlay.hidden = true;
+  sceneOverlay.hidden = true;
+  sceneOverlay.classList.remove("has-illustration");
+  sceneIllustration.hidden = true;
+  clearCinematicCutIn();
+  cancelMessageTyping();
+  clearResultLabel();
+  clearCharacterBeat();
+  hideInputGuide(false);
+  state.finalConfirmHand = null;
+  setSelectedButton();
+  setButtonsEnabled(false);
+  updateGalleryButton();
+
   AudioManager.initAudio();
-  AudioManager.switchBgm("normal");
   AudioManager.playSound("start");
+
+  await Promise.race([startupAssetsReady || preloadStartupAssets(), wait(400)]);
+  await wait(60);
+
   state.started = true;
   state.ended = false;
   cabinet.classList.add("is-playing");
+  updateGalleryButton();
+  window.setTimeout(() => {
+    if (state.started && !state.ended) {
+      AudioManager.switchBgm("normal");
+    }
+  }, 120);
   showIntroThenReady();
+
+  if (DEBUG_MODE) {
+    console.timeEnd("startGame");
+  }
 }
 
 async function playRound(player) {
@@ -1378,13 +1978,24 @@ async function playRound(player) {
     return;
   }
 
+  if (DEBUG_MODE) {
+    console.time("playRound");
+  }
+
+  const endPlayRoundTimer = () => {
+    if (DEBUG_MODE) {
+      console.timeEnd("playRound");
+    }
+  };
+
   state.busy = true;
+  state.finalConfirmHand = null;
+  cabinet.classList.remove("is-final-confirm");
   stopChanceMessages();
   resetRoundView();
   AudioManager.playSound("select");
   setSelectedButton(player);
   setButtonsEnabled(false);
-  cabinet.classList.add("is-shaking");
 
   const callMode = state.nextCallMode;
   const cpu = chooseCpuHand(player);
@@ -1394,18 +2005,25 @@ async function playRound(player) {
   const calls = callMode === "draw" ? ["あいこで"] : ["ジャン", "ケン"];
   const revealCall = callMode === "draw" ? "しょ！" : "ポン！";
 
-  for (const call of calls) {
+  for (const [index, call] of calls.entries()) {
+    const callSound = callMode === "draw" ? "call1" : index === 0 ? "call1" : "call2";
+    const beatClass = callMode === "draw" ? "is-beat-1" : index === 0 ? "is-beat-1" : "is-beat-2";
     showMessage(call, "is-calling");
+    AudioManager.playSound(callSound);
+    playCharacterBeat(beatClass);
     await wait(420);
   }
 
   showMessage(revealCall, "is-calling");
+  AudioManager.playSound("call3");
+  playCharacterBeat("is-beat-3");
+  await wait(40);
+
   renderHand(playerHand, player);
   renderHand(cpuHand, cpu);
-  AudioManager.playSound("reveal");
-  await wait(260);
+  AudioManager.playSound("handPop");
+  await wait(150);
 
-  cabinet.classList.remove("is-shaking");
   updateScore();
   const cpuMood = cpuMoodForResult(result);
   if (scoreChange.bonus > 1) {
@@ -1424,36 +2042,38 @@ async function playRound(player) {
       ? randomLine(dialogue.final.cpuLose)
       : randomLine(dialogue.final.cpuWin);
     AudioManager.playSound(result === "win" ? "win" : "lose");
-    showMessage(finalLine, `is-result is-${cpuMood} player-${result} is-final-entry`);
+    showMessage(finalLine, `is-result is-${cpuMood} player-${result} is-final-entry`, { typewriter: true });
   } else if (scoreChange.finalStarted) {
     state.nextCallMode = "draw";
     await showFinalJankenEntry();
+    endPlayRoundTimer();
     return;
   } else if (scoreChange.chanceStarted) {
     state.chanceMessageIndex = 0;
     setCharacter("excited");
+    triggerCinematicCutIn("chance");
     AudioManager.playSound("chance");
     AudioManager.switchBgm("chance");
-    showMessage(randomLine(CHANCE_ENTRY_LINES), "is-result is-draw player-draw is-chance-entry");
+    showMessage(randomLine(CHANCE_ENTRY_LINES), "is-result is-draw player-draw is-chance-entry", { typewriter: true });
   } else if (scoreChange.warningStarted) {
     setCharacter("worried");
     AudioManager.playSound("draw");
-    showMessage(randomLine(DRAW_WARNING_LINES), "is-result is-draw player-draw is-draw-warning");
+    showMessage(randomLine(DRAW_WARNING_LINES), "is-result is-draw player-draw is-draw-warning", { typewriter: true });
   } else if (scoreChange.bonus > 1 && result === "win") {
     AudioManager.playSound("win");
-    showMessage(randomLine(dialogue.chance.cpuLose), "is-result is-lose player-win is-double");
+    showMessage(randomLine(dialogue.chance.cpuLose), "is-result is-lose player-win is-double", { typewriter: true });
   } else if (scoreChange.bonus > 1 && result === "lose") {
     AudioManager.playSound("lose");
-    showMessage(randomLine(dialogue.chance.cpuWin), "is-result is-win player-lose is-double");
+    showMessage(randomLine(dialogue.chance.cpuWin), "is-result is-win player-lose is-double", { typewriter: true });
   } else if (state.finalJanken && result === "draw") {
     AudioManager.playSound("draw");
-    showMessage(randomLine(FINAL_JANKEN_IDLE_LINES), "is-result is-draw player-draw is-final-entry");
+    showMessage(randomLine(FINAL_JANKEN_IDLE_LINES), "is-result is-draw player-draw is-final-entry", { typewriter: true });
   } else if (state.chance && result === "draw") {
     AudioManager.playSound("draw");
-    showMessage(randomLine(dialogue.chance.draw), "is-result is-draw player-draw");
+    showMessage(randomLine(dialogue.chance.draw), "is-result is-draw player-draw", { typewriter: true });
   } else {
     AudioManager.playSound(result);
-    showMessage(resultText(result), `is-result is-${cpuMood} player-${result}`);
+    showMessage(resultText(result), `is-result is-${cpuMood} player-${result}`, { typewriter: true });
   }
 
   state.nextCallMode = result === "draw" ? "draw" : "normal";
@@ -1471,14 +2091,17 @@ async function playRound(player) {
 
   if (roundEndsMatch) {
     endGame(scoreChange.finalResolved ? scoreChange.finalResult : state.win >= MATCH_POINT ? "win" : "lose");
+    endPlayRoundTimer();
     return;
   }
 
   state.busy = false;
+  state.finalConfirmHand = null;
   setSelectedButton();
   setButtonsEnabled(true);
   updateCharacterByScore();
   showNextInputPrompt();
+  endPlayRoundTimer();
 }
 
 characterImage.addEventListener("error", useFallbackCharacter);
@@ -1486,6 +2109,10 @@ sceneCharacterImage.addEventListener("error", useFallbackSceneCharacter);
 sceneIllustration.addEventListener("error", fallbackSceneIllustration);
 startButton.addEventListener("click", startGame);
 retryButton.addEventListener("click", restartMatch);
+galleryButton?.addEventListener("click", openGallery);
+galleryCloseButton?.addEventListener("click", () => closeGallery());
+galleryPrevButton?.addEventListener("click", () => moveGallery(-1));
+galleryNextButton?.addEventListener("click", () => moveGallery(1));
 muteButton.addEventListener("click", () => {
   AudioManager.initAudio();
   if (trackDebugToggleTap()) {
@@ -1499,7 +2126,7 @@ muteButton.addEventListener("click", () => {
 
 choiceButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    playRound(button.dataset.hand);
+    handleChoiceButtonClick(button.dataset.hand);
   });
 });
 
@@ -1518,11 +2145,15 @@ document.querySelectorAll(".choice-hand-image").forEach((image) => {
 });
 
 useFallbackCharacter();
-preloadCharacterImages();
-preloadSceneImages();
+preloadStartupAssets();
+scheduleIdleTask(() => {
+  preloadCharacterImages();
+  preloadSceneImages();
+}, 700);
 setCharacter("normal");
 AudioManager.initAudio();
 AudioManager.updateMuteButton();
+updateGalleryButton();
 if (DEBUG_MODE) {
   toggleDebugMode(true);
 }

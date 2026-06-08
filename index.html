@@ -25,7 +25,9 @@
             <span>TAP START</span>
             <strong>INSERT COIN</strong>
             <small>10 WINS MATCH</small>
+            <em class="title-credit">CREDIT: sima uma / Prototype</em>
           </button>
+          <button id="galleryButton" class="gallery-button" type="button" hidden>GALLERY</button>
 
           <div id="endOverlay" class="end-overlay" hidden>
             <p id="finalTitle" class="final-title">YOU WIN!</p>
@@ -44,6 +46,24 @@
               </div>
             </div>
             <p id="sceneMessage" class="scene-message" aria-live="polite"></p>
+          </div>
+
+          <div id="galleryOverlay" class="gallery-overlay" hidden>
+            <div class="gallery-window">
+              <div class="gallery-header">
+                <strong>GALLERY MODE</strong>
+                <button id="galleryCloseButton" type="button">CLOSE</button>
+              </div>
+              <div class="gallery-preview">
+                <img id="galleryImage" alt="Gallery image" hidden>
+              </div>
+              <p id="galleryCaption" class="gallery-caption"></p>
+              <div class="gallery-controls">
+                <button id="galleryPrevButton" type="button" aria-label="Previous gallery image">&lt;</button>
+                <span id="galleryCounter"></span>
+                <button id="galleryNextButton" type="button" aria-label="Next gallery image">&gt;</button>
+              </div>
+            </div>
           </div>
 
           <div class="scoreboard" aria-label="スコア">
@@ -84,6 +104,10 @@
 
       <section class="control-panel" aria-label="操作パネル">
         <div class="panel-line"></div>
+        <div id="inputGuide" class="input-guide" hidden aria-hidden="true">
+          <span>好きな手を選んでね！</span>
+          <strong>▼ ▼ ▼</strong>
+        </div>
         <div class="choice-buttons">
           <button class="choice rock" type="button" data-hand="rock" disabled>
             <span class="choice-icon">

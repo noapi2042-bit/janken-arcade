@@ -472,6 +472,29 @@ button {
   display: grid;
   place-items: end center;
   padding: 74px 0 42px;
+  isolation: isolate;
+  overflow: visible;
+}
+
+.show-window::before,
+.show-window::after {
+  content: "";
+  position: absolute;
+  inset: 58px 0 22px;
+  z-index: 0;
+  border-radius: 16px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.show-window::before {
+  background: radial-gradient(circle at 50% 44%, rgba(168, 255, 112, 0.16), transparent 58%);
+  transition: opacity 0.22s ease, background 0.22s ease;
+}
+
+.show-window::after {
+  inset: 64px 0 22px;
+  transition: opacity 0.22s ease;
 }
 
 .character-frame {
@@ -489,6 +512,7 @@ button {
     radial-gradient(circle at 50% 64%, rgba(168, 255, 112, 0.18), transparent 48%),
     rgba(0, 0, 0, 0.08);
   box-shadow: 0 0 24px rgba(90, 255, 119, 0.12);
+  will-change: transform;
 }
 
 .character-frame img {
@@ -503,6 +527,7 @@ button {
   transform: translate(-50%, -20%);
   transform-origin: center center;
   transition: height 0.22s ease, transform 0.22s ease;
+  will-change: transform, opacity;
 }
 
 .character-frame[data-mood="normal"] img,
@@ -609,7 +634,7 @@ button {
   box-shadow: none;
 }
 
-.hand-card:has(strong.is-hand-pop)::after {
+.hand-card.is-hand-pop-frame::after {
   animation: hand-frame-pulse 0.46s cubic-bezier(0.18, 1.25, 0.3, 1) both;
 }
 
@@ -649,7 +674,11 @@ button {
 }
 
 .hand-card strong.is-hand-pop .hand-result-image {
-  animation: hand-reveal-pop 0.42s cubic-bezier(0.18, 1.25, 0.3, 1) both;
+  animation: hand-reveal-pop 0.46s cubic-bezier(0.18, 1.25, 0.3, 1) both;
+}
+
+.hand-result-image {
+  will-change: transform, opacity;
 }
 
 .versus {
@@ -672,6 +701,9 @@ button {
 }
 
 .message {
+  --bubble-border: rgba(168, 255, 112, 0.72);
+  --bubble-bg: rgba(0, 18, 8, 0.76);
+  --bubble-glow: rgba(168, 255, 112, 0.16);
   position: absolute;
   z-index: 5;
   top: 0;
@@ -680,9 +712,11 @@ button {
   min-height: 66px;
   max-height: 92px;
   margin: 0;
-  padding: 8px 12px 9px;
+  padding: 8px 12px 13px;
   display: grid;
   place-items: center;
+  isolation: isolate;
+  overflow: visible;
   overflow-wrap: anywhere;
   word-break: keep-all;
   color: #fff27a;
@@ -690,23 +724,25 @@ button {
   line-height: 1.04;
   text-align: center;
   text-shadow: 0 0 12px currentColor, 3px 3px 0 rgba(0, 0, 0, 0.72);
-  border: 3px solid rgba(168, 255, 112, 0.72);
+  border: 3px solid var(--bubble-border);
   border-radius: 16px 16px 16px 4px;
-  background: rgba(0, 18, 8, 0.76);
-  box-shadow: inset 0 0 18px rgba(168, 255, 112, 0.16), 0 0 18px rgba(168, 255, 112, 0.14);
+  background: var(--bubble-bg);
+  box-shadow: inset 0 0 18px var(--bubble-glow), 0 0 18px var(--bubble-glow);
   transform: translateX(-50%);
+  will-change: transform, opacity;
 }
 
 .message::after {
   content: "";
   position: absolute;
+  z-index: -1;
   left: 50%;
   bottom: -15px;
   width: 22px;
   height: 22px;
-  border-left: 3px solid rgba(168, 255, 112, 0.72);
-  border-bottom: 3px solid rgba(168, 255, 112, 0.72);
-  background: rgba(0, 18, 8, 0.76);
+  border-left: 3px solid var(--bubble-border);
+  border-bottom: 3px solid var(--bubble-border);
+  background: var(--bubble-bg);
   transform: translateX(-50%) rotate(-45deg);
 }
 
@@ -728,6 +764,10 @@ button {
   transform: translateX(-50%) scale(0.92);
   opacity: 0;
   pointer-events: none;
+  transition:
+    opacity 0.22s ease,
+    transform 0.22s ease;
+  will-change: transform, opacity;
 }
 
 .result-label.is-visible {
@@ -766,6 +806,12 @@ button {
   animation: result-pop 0.24s ease both, win-blink 0.58s steps(2, start) 3;
 }
 
+.result-label.is-hiding {
+  opacity: 0;
+  transform: translateX(-50%) scale(0.96);
+  animation: none;
+}
+
 .start-overlay {
   position: absolute;
   left: 50%;
@@ -801,6 +847,51 @@ button {
 .start-overlay strong {
   font-size: clamp(1.65rem, 8.8vw, 2.55rem);
   line-height: 1;
+}
+
+.title-credit {
+  color: rgba(76, 33, 0, 0.72);
+  font-size: clamp(0.55rem, 2.4vw, 0.72rem);
+  font-style: normal;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.gallery-button {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 102px);
+  z-index: 7;
+  min-width: 116px;
+  min-height: 34px;
+  padding: 7px 12px;
+  color: #fff6a8;
+  background:
+    linear-gradient(180deg, rgba(168, 255, 112, 0.16), transparent 42%),
+    rgba(0, 20, 8, 0.86);
+  border: 2px solid rgba(168, 255, 112, 0.78);
+  border-radius: 7px;
+  box-shadow:
+    inset 0 0 12px rgba(168, 255, 112, 0.16),
+    0 0 14px rgba(168, 255, 112, 0.18);
+  font-size: clamp(0.74rem, 3vw, 0.92rem);
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-shadow: 0 0 9px currentColor;
+  transform: translateX(-50%);
+  cursor: pointer;
+}
+
+.gallery-button[hidden],
+.gallery-overlay[hidden],
+.is-playing .gallery-button,
+.is-ended .gallery-button,
+.is-blackout .gallery-button {
+  display: none;
+}
+
+.gallery-button.is-new {
+  animation: gallery-new-blink 1s steps(2, start) 4;
 }
 
 .start-overlay:active {
@@ -879,6 +970,44 @@ button {
     repeating-linear-gradient(90deg, var(--trim-yellow) 0 22px, #1b0b0f 22px 31px);
   border-radius: 999px;
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.48);
+}
+
+.input-guide {
+  position: absolute;
+  left: 50%;
+  top: -36px;
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  min-width: min(82%, 280px);
+  padding: 7px 12px 6px;
+  color: #fff5a6;
+  font-size: clamp(0.74rem, 3.1vw, 0.92rem);
+  line-height: 1;
+  text-align: center;
+  text-shadow:
+    0 0 8px rgba(255, 233, 95, 0.7),
+    0 2px 5px rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 232, 114, 0.55);
+  border-radius: 999px;
+  background: rgba(18, 8, 0, 0.74);
+  box-shadow:
+    inset 0 0 12px rgba(255, 212, 85, 0.18),
+    0 0 14px rgba(0, 0, 0, 0.32);
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: input-guide-blink 1.1s steps(2, start) infinite;
+}
+
+.input-guide[hidden] {
+  display: none;
+}
+
+.input-guide strong {
+  color: #ffef5f;
+  font-size: 0.86em;
+  letter-spacing: 0.28em;
 }
 
 .choice-buttons {
@@ -1052,12 +1181,27 @@ button {
   gap: 10px;
 }
 
-.is-shaking .character-frame {
-  animation: shake 0.18s linear infinite;
+.is-calling .message {
+  --bubble-border: rgba(255, 242, 122, 0.88);
+  --bubble-bg: rgba(23, 26, 0, 0.82);
+  --bubble-glow: rgba(255, 242, 122, 0.24);
+  letter-spacing: 0.08em;
 }
 
-.is-calling .message {
+.message.is-message-pop {
   animation: call-pop 0.42s ease both;
+}
+
+.character-frame.is-beat-1 {
+  animation: character-beat-1 0.18s ease-out both;
+}
+
+.character-frame.is-beat-2 {
+  animation: character-beat-2 0.18s ease-out both;
+}
+
+.character-frame.is-beat-3 {
+  animation: character-beat-3 0.24s cubic-bezier(0.18, 1.25, 0.3, 1) both;
 }
 
 .is-result .message {
@@ -1067,24 +1211,30 @@ button {
 }
 
 .is-win .message {
-  border-color: rgba(255, 240, 104, 0.88);
-  box-shadow: inset 0 0 18px rgba(255, 240, 104, 0.2), 0 0 20px rgba(255, 240, 104, 0.22);
+  --bubble-border: rgba(255, 239, 90, 0.88);
+  --bubble-bg: rgba(38, 30, 0, 0.82);
+  --bubble-glow: rgba(255, 239, 90, 0.24);
 }
 
 .is-lose .message {
+  --bubble-border: rgba(255, 116, 132, 0.88);
+  --bubble-bg: rgba(38, 4, 12, 0.82);
+  --bubble-glow: rgba(255, 90, 112, 0.22);
   color: #ffb0b0;
-  border-color: rgba(255, 120, 120, 0.82);
 }
 
 .is-draw .message {
+  --bubble-border: rgba(141, 245, 255, 0.84);
+  --bubble-bg: rgba(0, 24, 30, 0.8);
+  --bubble-glow: rgba(141, 245, 255, 0.22);
   color: #c8fff5;
-  border-color: rgba(124, 235, 255, 0.78);
 }
 
 .is-double .message {
+  --bubble-border: rgba(255, 219, 74, 0.94);
+  --bubble-bg: rgba(42, 25, 0, 0.86);
+  --bubble-glow: rgba(255, 196, 40, 0.3);
   color: #ffef66;
-  border-color: rgba(255, 190, 52, 0.92);
-  box-shadow: inset 0 0 22px rgba(255, 190, 52, 0.24), 0 0 24px rgba(255, 190, 52, 0.3);
 }
 
 .is-double .message,
@@ -1093,42 +1243,357 @@ button {
 }
 
 .is-chance-entry .message {
+  --bubble-border: rgba(255, 219, 74, 0.94);
+  --bubble-bg: rgba(42, 25, 0, 0.86);
+  --bubble-glow: rgba(255, 196, 40, 0.3);
   color: #ffe866;
-  border-color: rgba(255, 232, 102, 0.9);
-  box-shadow: inset 0 0 22px rgba(255, 190, 52, 0.24), 0 0 24px rgba(255, 190, 52, 0.3);
   animation: chance-message-pop 0.65s ease both;
 }
 
 .is-draw-warning .message {
+  --bubble-border: rgba(190, 255, 255, 0.88);
+  --bubble-bg: rgba(0, 22, 26, 0.84);
+  --bubble-glow: rgba(190, 255, 255, 0.24);
   color: #d8fff2;
-  border-color: rgba(168, 255, 214, 0.78);
-  box-shadow: inset 0 0 18px rgba(168, 255, 214, 0.16), 0 0 18px rgba(168, 255, 214, 0.18);
 }
 
 .is-final-entry .message {
+  --bubble-border: rgba(255, 92, 92, 0.92);
+  --bubble-bg: rgba(36, 0, 0, 0.86);
+  --bubble-glow: rgba(255, 72, 72, 0.3);
   color: #fff066;
-  border-color: rgba(255, 116, 116, 0.86);
-  box-shadow:
-    inset 0 0 24px rgba(255, 212, 64, 0.22),
-    0 0 26px rgba(255, 92, 92, 0.28);
+  font-size: clamp(1.25rem, 5.8vw, 1.9rem);
+  line-height: 1.08;
+  padding-bottom: 14px;
   animation: chance-message-pop 0.65s ease both;
+}
+
+.cabinet.player-win .message {
+  --bubble-border: rgba(255, 239, 90, 0.9);
+  --bubble-bg: rgba(38, 30, 0, 0.84);
+  --bubble-glow: rgba(255, 239, 90, 0.26);
+  color: #fff6a8;
+}
+
+.cabinet.player-lose .message {
+  --bubble-border: rgba(255, 116, 132, 0.9);
+  --bubble-bg: rgba(38, 4, 12, 0.84);
+  --bubble-glow: rgba(255, 90, 112, 0.24);
+  color: #ffb0b0;
+}
+
+.cabinet.player-draw .message {
+  --bubble-border: rgba(141, 245, 255, 0.86);
+  --bubble-bg: rgba(0, 24, 30, 0.82);
+  --bubble-glow: rgba(141, 245, 255, 0.24);
+  color: #c8fff5;
+}
+
+.cabinet.is-chance .message,
+.cabinet.is-double .message,
+.cabinet.is-chance-entry .message {
+  --bubble-border: rgba(255, 219, 74, 0.94);
+  --bubble-bg: rgba(42, 25, 0, 0.86);
+  --bubble-glow: rgba(255, 196, 40, 0.3);
+}
+
+.cabinet.is-final-janken .message,
+.cabinet.is-final-entry .message {
+  --bubble-border: rgba(255, 92, 92, 0.92);
+  --bubble-bg: rgba(36, 0, 0, 0.86);
+  --bubble-glow: rgba(255, 72, 72, 0.3);
+}
+
+.cabinet.cutin-psych .message {
+  --bubble-border: rgba(255, 230, 130, 0.98);
+  --bubble-bg: rgba(32, 0, 44, 0.92);
+  --bubble-glow: rgba(255, 210, 120, 0.45);
+}
+
+.cabinet.player-win .show-window::before {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 238, 91, 0.32), transparent 54%),
+    radial-gradient(circle at 18% 24%, rgba(255, 255, 180, 0.22), transparent 18%),
+    radial-gradient(circle at 84% 30%, rgba(255, 231, 80, 0.18), transparent 20%);
+}
+
+.cabinet.player-win .show-window::after {
+  opacity: 0.58;
+  background:
+    radial-gradient(circle at 16% 28%, rgba(255, 255, 160, 0.9) 0 2px, transparent 3px),
+    radial-gradient(circle at 78% 38%, rgba(255, 255, 160, 0.75) 0 2px, transparent 3px),
+    radial-gradient(circle at 58% 20%, rgba(255, 255, 200, 0.65) 0 1px, transparent 3px),
+    radial-gradient(circle at 36% 72%, rgba(255, 255, 160, 0.6) 0 2px, transparent 4px);
+  animation: mood-sparkle 1.1s steps(2, start) 2;
+}
+
+.cabinet.player-lose .show-window::before {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(255, 84, 100, 0.28), transparent 56%),
+    linear-gradient(90deg, rgba(255, 70, 80, 0.16), transparent 18%, transparent 82%, rgba(255, 70, 80, 0.16));
+}
+
+.cabinet.player-lose .show-window::after {
+  opacity: 0.42;
+  background:
+    repeating-linear-gradient(
+      115deg,
+      transparent 0 12px,
+      rgba(255, 90, 110, 0.16) 12px 14px,
+      transparent 14px 28px
+    );
+  animation: mood-danger-slide 0.75s linear 1;
+}
+
+.cabinet.player-draw .show-window::before,
+.cabinet.is-draw .show-window::before {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(141, 245, 255, 0.26), transparent 56%),
+    radial-gradient(circle at 30% 32%, rgba(141, 245, 255, 0.16), transparent 20%),
+    radial-gradient(circle at 74% 62%, rgba(141, 245, 255, 0.15), transparent 22%);
+}
+
+.cabinet.player-draw .show-window::after,
+.cabinet.is-draw .show-window::after {
+  opacity: 0.42;
+  background:
+    radial-gradient(circle at 22% 26%, rgba(141, 245, 255, 0.65) 0 2px, transparent 4px),
+    radial-gradient(circle at 70% 34%, rgba(141, 245, 255, 0.55) 0 2px, transparent 4px),
+    radial-gradient(circle at 48% 70%, rgba(141, 245, 255, 0.45) 0 2px, transparent 4px);
+}
+
+.cabinet.is-draw-warning .show-window::before {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(180, 255, 255, 0.16), transparent 54%),
+    linear-gradient(180deg, rgba(180, 255, 255, 0.08), transparent 62%);
+}
+
+.cabinet.is-chance .show-window::before {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(255, 220, 74, 0.22), transparent 58%),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 14px,
+      rgba(255, 210, 72, 0.08) 14px 16px,
+      transparent 16px 30px
+    );
+}
+
+.cabinet.is-final-janken .show-window::before {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 230, 92, 0.22), transparent 34%),
+    repeating-conic-gradient(
+      from 0deg at 50% 50%,
+      rgba(255, 82, 82, 0.18) 0deg 8deg,
+      transparent 8deg 18deg
+    );
+  animation: final-aura-pulse 0.78s ease-in-out infinite alternate;
+}
+
+.cabinet.is-final-janken .show-window::after {
+  opacity: 0.34;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 18px,
+      rgba(255, 224, 90, 0.16) 18px 20px,
+      transparent 20px 38px
+    );
+}
+
+.cabinet.is-cinematic-cutin .crt::before {
+  opacity: 1;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.55) 46%,
+      rgba(255, 255, 255, 0.9) 50%,
+      rgba(255, 255, 255, 0.55) 54%,
+      transparent 100%
+    );
+  animation: cinematic-flash-strong 0.34s ease-out 1 both;
+}
+
+.cabinet.cutin-psych .show-window::before {
+  opacity: 0.95;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(255, 210, 120, 0.34), transparent 42%),
+    linear-gradient(120deg, rgba(80, 0, 100, 0.42), transparent 46%),
+    linear-gradient(300deg, rgba(0, 0, 0, 0.52), transparent 58%),
+    repeating-linear-gradient(
+      115deg,
+      rgba(255, 230, 120, 0) 0 8px,
+      rgba(255, 230, 120, 0.32) 8px 11px,
+      rgba(90, 0, 120, 0) 11px 23px
+    );
+  animation: psych-cutin-sweep 0.9s linear 1;
+}
+
+.cabinet.cutin-psych .show-window::after {
+  opacity: 0.75;
+  background:
+    radial-gradient(circle at 22% 28%, rgba(255, 245, 160, 1) 0 3px, transparent 5px),
+    radial-gradient(circle at 78% 36%, rgba(255, 220, 100, 0.9) 0 3px, transparent 5px),
+    repeating-linear-gradient(
+      100deg,
+      transparent 0 14px,
+      rgba(255, 255, 255, 0.28) 14px 16px,
+      transparent 16px 32px
+    );
+  animation: cutin-lines-fast 0.7s linear 1;
+}
+
+.cabinet.cutin-chance .message {
+  --bubble-border: rgba(255, 236, 80, 0.98);
+  --bubble-bg: rgba(50, 28, 0, 0.92);
+  --bubble-glow: rgba(255, 216, 60, 0.45);
+  color: #fff066;
+}
+
+.cabinet.cutin-chance .show-window::before,
+.cabinet.is-chance-entry .show-window::before {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(255, 250, 110, 0.45), transparent 44%),
+    conic-gradient(
+      from 0deg at 50% 50%,
+      rgba(255, 80, 80, 0.22),
+      rgba(255, 210, 60, 0.38),
+      rgba(90, 255, 130, 0.24),
+      rgba(80, 210, 255, 0.24),
+      rgba(255, 90, 220, 0.22),
+      rgba(255, 80, 80, 0.22)
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 10px,
+      rgba(255, 255, 150, 0.28) 10px 13px,
+      transparent 13px 24px
+    );
+  animation: chance-rainbow-burst 1.2s linear 1;
+}
+
+.cabinet.cutin-chance .show-window::after,
+.cabinet.is-chance-entry .show-window::after {
+  opacity: 0.82;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 255, 160, 1) 0 4px, transparent 6px),
+    radial-gradient(circle at 84% 30%, rgba(255, 255, 160, 1) 0 4px, transparent 6px),
+    radial-gradient(circle at 50% 72%, rgba(255, 240, 90, 0.9) 0 4px, transparent 7px),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 12px,
+      rgba(255, 230, 80, 0.32) 12px 15px,
+      transparent 15px 28px
+    );
+  animation: chance-flash-steps 1.1s steps(2, start) 2;
+}
+
+.cabinet.cutin-chance .scoreboard span,
+.cabinet.is-chance-entry .scoreboard span,
+.cabinet.cutin-chance .hand-card,
+.cabinet.is-chance-entry .hand-card {
+  color: #fff066;
+  border-color: rgba(255, 236, 80, 0.95);
+  box-shadow:
+    inset 0 0 18px rgba(255, 230, 80, 0.26),
+    0 0 18px rgba(255, 200, 40, 0.28);
+}
+
+.cabinet.cutin-final .show-window::before,
+.cabinet.is-final-entry .show-window::before,
+.cabinet.is-final-janken .show-window::before {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 240, 90, 0.52), transparent 22%),
+    repeating-conic-gradient(
+      from -8deg at 50% 50%,
+      rgba(255, 40, 40, 0.42) 0deg 7deg,
+      rgba(255, 214, 60, 0.22) 7deg 10deg,
+      transparent 10deg 18deg
+    ),
+    radial-gradient(circle at 50% 50%, rgba(255, 60, 60, 0.3), rgba(0, 0, 0, 0.2) 70%);
+  animation: final-cutin-pulse 0.58s ease-in-out 4 alternate;
+}
+
+.cabinet.cutin-final .show-window::after,
+.cabinet.is-final-entry .show-window::after,
+.cabinet.is-final-janken .show-window::after {
+  opacity: 0.85;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 8px,
+      rgba(255, 230, 90, 0.34) 8px 11px,
+      transparent 11px 18px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 12px,
+      rgba(255, 60, 60, 0.2) 12px 15px,
+      transparent 15px 30px
+    );
+  animation: final-line-scan 0.46s linear 3;
+}
+
+.cabinet.cutin-final .message,
+.cabinet.is-final-entry .message,
+.cabinet.is-final-janken .message {
+  --bubble-border: rgba(255, 236, 90, 1);
+  --bubble-bg: rgba(48, 0, 0, 0.94);
+  --bubble-glow: rgba(255, 64, 64, 0.46);
+  color: #fff066;
+}
+
+.cabinet.is-final-confirm .message {
+  --bubble-border: rgba(255, 235, 116, 0.96);
+  --bubble-bg: rgba(46, 8, 0, 0.9);
+  --bubble-glow: rgba(255, 193, 56, 0.34);
+  color: #fff5a8;
+  animation: final-confirm-pulse 0.82s ease-in-out infinite alternate;
+}
+
+.cabinet.cutin-final .scoreboard span,
+.cabinet.is-final-janken .scoreboard span,
+.cabinet.cutin-final .hand-card,
+.cabinet.is-final-janken .hand-card {
+  color: #fff066;
+  border-color: rgba(255, 220, 70, 0.98);
+  box-shadow:
+    inset 0 0 18px rgba(255, 50, 50, 0.28),
+    0 0 22px rgba(255, 210, 60, 0.28);
+}
+
+.cabinet.is-cinematic-cutin .hand-card {
+  background:
+    linear-gradient(180deg, rgba(255, 240, 112, 0.12), transparent 24%, rgba(0, 0, 0, 0.44)),
+    rgba(0, 0, 0, 0.62);
 }
 
 .is-chance .crt {
   box-shadow:
-    inset 0 0 42px #000,
-    inset 0 0 18px #ffbd38,
+    inset 0 0 58px #000,
+    inset 0 0 24px rgba(255, 222, 80, 0.54),
+    inset 0 6px 14px rgba(255, 255, 255, 0.05),
     0 0 0 3px #211917,
-    0 0 22px rgba(255, 178, 49, 0.32);
+    0 0 24px rgba(255, 220, 90, 0.16);
 }
 
 .is-final-janken .crt {
   box-shadow:
-    inset 0 0 42px #000,
-    inset 0 0 20px #ff4242,
-    inset 0 0 16px #ffdc40,
+    inset 0 0 58px #000,
+    inset 0 0 22px rgba(255, 66, 66, 0.58),
+    inset 0 0 18px rgba(255, 220, 64, 0.42),
+    inset 0 6px 14px rgba(255, 255, 255, 0.05),
     0 0 0 3px #211917,
-    0 0 24px rgba(255, 75, 75, 0.34);
+    0 0 24px rgba(255, 75, 75, 0.24);
 }
 
 .is-chance .scoreboard span,
@@ -1287,6 +1752,101 @@ button {
   word-break: keep-all;
 }
 
+.gallery-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 9;
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  color: var(--screen-green);
+  background:
+    radial-gradient(circle at 50% 20%, rgba(168, 255, 112, 0.12), transparent 38%),
+    rgba(0, 8, 4, 0.9);
+  border: 3px solid rgba(168, 255, 112, 0.74);
+  border-radius: 22px / 18px;
+  box-shadow:
+    inset 0 0 22px rgba(168, 255, 112, 0.12),
+    0 0 18px rgba(0, 0, 0, 0.48);
+}
+
+.gallery-window {
+  width: min(100%, 340px);
+  height: min(100%, 500px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 8px;
+  min-height: 0;
+}
+
+.gallery-header,
+.gallery-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gallery-header strong {
+  color: #fff6a8;
+  font-size: clamp(0.9rem, 4vw, 1.18rem);
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 10px currentColor;
+}
+
+.gallery-header button,
+.gallery-controls button {
+  min-width: 56px;
+  min-height: 36px;
+  color: #061808;
+  background: linear-gradient(#baff7f, #71d852);
+  border: 0;
+  border-bottom: 4px solid #2a6d1c;
+  border-radius: 7px;
+  box-shadow: 0 0 12px rgba(168, 255, 112, 0.22);
+  cursor: pointer;
+}
+
+.gallery-preview {
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  background:
+    linear-gradient(180deg, rgba(168, 255, 112, 0.08), transparent 30%),
+    rgba(0, 0, 0, 0.38);
+  border: 2px solid rgba(168, 255, 112, 0.5);
+  border-radius: 10px;
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.42);
+  overflow: hidden;
+}
+
+.gallery-preview img {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 10px rgba(168, 255, 112, 0.14));
+}
+
+.gallery-caption {
+  min-height: 24px;
+  margin: 0;
+  color: #fff6a8;
+  font-size: clamp(0.82rem, 3.4vw, 1rem);
+  line-height: 1.15;
+  text-align: center;
+  text-shadow: 0 0 8px currentColor;
+}
+
+.gallery-controls {
+  color: #fff6a8;
+  font-size: 0.86rem;
+  text-shadow: 0 0 8px currentColor;
+}
+
 .is-scene .scoreboard,
 .is-scene .stage,
 .is-scene .end-overlay {
@@ -1381,16 +1941,49 @@ button {
   }
 }
 
-@keyframes shake {
-  0%,
+@keyframes gallery-new-blink {
+  50% {
+    color: #061808;
+    background: linear-gradient(#fff07a, #f1c33f);
+    box-shadow:
+      0 0 18px rgba(255, 240, 122, 0.48),
+      inset 0 0 10px rgba(255, 255, 255, 0.24);
+  }
+}
+
+@keyframes character-beat-1 {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  45% {
+    transform: translateY(3px) scale(0.992);
+  }
   100% {
-    transform: translateX(0);
+    transform: translateY(0) scale(1);
   }
-  25% {
-    transform: translateX(-4px);
+}
+
+@keyframes character-beat-2 {
+  0% {
+    transform: translateY(0) scale(1);
   }
-  75% {
-    transform: translateX(4px);
+  45% {
+    transform: translateY(-2px) scale(1.01);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes character-beat-3 {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  42% {
+    transform: translateY(-5px) scale(1.045);
+  }
+  100% {
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -1467,18 +2060,18 @@ button {
 @keyframes hand-reveal-pop {
   0% {
     opacity: 0;
-    transform: scale(0.45) rotate(-8deg);
+    transform: scale(0.55) rotate(-5deg);
   }
-  55% {
+  42% {
     opacity: 1;
-    transform: scale(1.14) rotate(4deg);
+    transform: scale(1.5) rotate(3deg);
   }
-  78% {
-    transform: scale(0.96) rotate(-2deg);
+  68% {
+    transform: scale(1.16) rotate(-1deg);
   }
   100% {
     opacity: 1;
-    transform: scale(1) rotate(0);
+    transform: scale(1) rotate(0deg);
   }
 }
 
@@ -1490,18 +2083,18 @@ button {
     box-shadow: none;
   }
 
-  45% {
+  35% {
     opacity: 1;
-    transform: scale(1.055);
-    border-color: rgba(230, 255, 150, 0.9);
+    transform: scale(1.08);
+    border-color: rgba(230, 255, 150, 0.95);
     box-shadow:
-      0 0 12px rgba(230, 255, 150, 0.48),
-      inset 0 0 10px rgba(168, 255, 112, 0.18);
+      0 0 16px rgba(230, 255, 150, 0.58),
+      inset 0 0 12px rgba(168, 255, 112, 0.22);
   }
 
   100% {
     opacity: 0;
-    transform: scale(1.08);
+    transform: scale(1.02);
     border-color: rgba(230, 255, 150, 0);
     box-shadow:
       0 0 4px rgba(230, 255, 150, 0),
@@ -1530,6 +2123,145 @@ button {
   }
   100% {
     transform: translateX(-50%) scale(1);
+  }
+}
+
+@keyframes input-guide-blink {
+  50% {
+    opacity: 0.72;
+  }
+}
+
+@keyframes final-confirm-pulse {
+  100% {
+    box-shadow:
+      0 0 16px rgba(255, 221, 82, 0.42),
+      inset 0 0 12px rgba(255, 196, 66, 0.18);
+  }
+}
+
+@keyframes cinematic-flash {
+  0% {
+    opacity: 0;
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes cinematic-flash-strong {
+  0% {
+    opacity: 0;
+    transform: translateX(-120%);
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(120%);
+  }
+}
+
+@keyframes cutin-slide-lines {
+  0% {
+    background-position: -80px 0, -80px 0;
+  }
+  100% {
+    background-position: 80px 0, 80px 0;
+  }
+}
+
+@keyframes psych-cutin-sweep {
+  0% {
+    background-position: -120px 0, 0 0, 0 0, -120px 0;
+  }
+  100% {
+    background-position: 120px 0, 0 0, 0 0, 120px 0;
+  }
+}
+
+@keyframes cutin-lines-fast {
+  0% {
+    background-position: -90px 0, -120px 0, -120px 0;
+  }
+  100% {
+    background-position: 90px 0, 120px 0, 120px 0;
+  }
+}
+
+@keyframes chance-rainbow-burst {
+  0% {
+    opacity: 0.2;
+    background-position: -100px 0, 0 0, -120px 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.85;
+    background-position: 100px 0, 0 0, 120px 0;
+  }
+}
+
+@keyframes chance-flash-steps {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+@keyframes final-aura-pulse {
+  from {
+    opacity: 0.38;
+  }
+  to {
+    opacity: 0.68;
+  }
+}
+
+@keyframes final-cutin-pulse {
+  from {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.035);
+  }
+}
+
+@keyframes final-line-scan {
+  0% {
+    background-position: -80px 0, 0 -80px;
+  }
+  100% {
+    background-position: 80px 0, 0 80px;
+  }
+}
+
+@keyframes mood-sparkle {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+  50% {
+    opacity: 0.56;
+  }
+}
+
+@keyframes mood-danger-slide {
+  0% {
+    background-position: -50px 0;
+  }
+  100% {
+    background-position: 50px 0;
   }
 }
 
@@ -1665,6 +2397,44 @@ button {
       0 2px 6px rgba(0, 0, 0, 0.85);
   }
 
+  .result-label {
+    bottom: -4px;
+  }
+
+  .cabinet.is-calling .message {
+    letter-spacing: 0.06em;
+  }
+
+  .gallery-button {
+    top: calc(50% + 96px);
+    min-height: 32px;
+    padding: 6px 11px;
+  }
+
+  .gallery-overlay {
+    inset: 7px;
+    padding: 8px;
+  }
+
+  .gallery-window {
+    gap: 7px;
+  }
+
+  .gallery-header button,
+  .gallery-controls button {
+    min-width: 52px;
+    min-height: 34px;
+  }
+
+  .hand-result-image {
+    width: clamp(72px, 20vw, 100px);
+    height: clamp(72px, 20vw, 100px);
+  }
+
+  .hand-card strong.is-hand-pop .hand-result-image {
+    animation: hand-reveal-pop 0.48s cubic-bezier(0.18, 1.25, 0.3, 1) both;
+  }
+
   .character-frame {
     width: min(82vw, 312px);
     height: min(74vw, 288px);
@@ -1764,6 +2534,7 @@ button {
     min-height: 56px;
     max-height: 80px;
     font-size: clamp(1.16rem, 5.8vw, 1.68rem);
+    padding-bottom: 11px;
   }
 
   .character-frame {
@@ -1824,8 +2595,8 @@ button {
   }
 
   .hand-result-image {
-    width: clamp(58px, 15.5vw, 78px);
-    height: clamp(58px, 15.5vw, 78px);
+    width: clamp(62px, 16vw, 86px);
+    height: clamp(62px, 16vw, 86px);
   }
 
   .control-panel {
@@ -1835,6 +2606,13 @@ button {
 
   .panel-line {
     margin-bottom: 8px;
+  }
+
+  .input-guide {
+    top: -31px;
+    min-width: min(86%, 260px);
+    padding: 6px 10px 5px;
+    font-size: clamp(0.68rem, 2.8vw, 0.84rem);
   }
 
   .choice {
@@ -1936,7 +2714,7 @@ button {
     width: min(100%, 270px);
     min-height: 50px;
     max-height: 74px;
-    padding: 7px 10px;
+    padding: 7px 10px 11px;
     font-size: clamp(1.06rem, 5.2vw, 1.48rem);
   }
 
@@ -1993,8 +2771,8 @@ button {
   }
 
   .hand-result-image {
-    width: clamp(52px, 15vw, 68px);
-    height: clamp(52px, 15vw, 68px);
+    width: clamp(56px, 15.5vw, 76px);
+    height: clamp(56px, 15.5vw, 76px);
   }
 
   .versus {
@@ -2015,6 +2793,13 @@ button {
   .panel-line {
     height: 3px;
     margin-bottom: 6px;
+  }
+
+  .input-guide {
+    top: -27px;
+    min-width: min(88%, 240px);
+    padding: 5px 8px 4px;
+    font-size: 0.66rem;
   }
 
   .choice-buttons {
@@ -2078,67 +2863,5 @@ button {
 
   .hands {
     grid-template-columns: minmax(0, 1fr) 46px minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 480px) {
-  .hands::before {
-    content: "";
-    position: absolute;
-    inset: -8px -4px -4px;
-    z-index: 0;
-    border-radius: 12px;
-    background: linear-gradient(180deg, rgba(0, 18, 8, 0.76), rgba(0, 0, 0, 0.62));
-    box-shadow:
-      inset 0 0 18px rgba(168, 255, 112, 0.1),
-      0 0 14px rgba(0, 0, 0, 0.3);
-    pointer-events: none;
-  }
-
-  .hand-card {
-    position: relative;
-    z-index: 1;
-    background:
-      linear-gradient(180deg, rgba(168, 255, 112, 0.1), transparent 24%, rgba(0, 0, 0, 0.34)),
-      rgba(0, 0, 0, 0.52);
-  }
-
-  .versus {
-    position: relative;
-    z-index: 1;
-    text-shadow:
-      0 0 10px currentColor,
-      0 2px 6px rgba(0, 0, 0, 0.85);
-  }
-
-  .character-frame {
-    width: min(82vw, 312px);
-    height: min(74vw, 288px);
-  }
-
-  .character-frame[data-mood="normal"] img,
-  .character-frame[data-mood="draw"] img,
-  .character-frame[data-mood="win"] img {
-    height: 510%;
-    transform: translate(-50%, -21%);
-  }
-
-  .character-frame[data-mood="happy"] img,
-  .character-frame[data-mood="smug"] img,
-  .character-frame[data-mood="excited"] img {
-    height: 555%;
-    transform: translate(-50%, -22%);
-  }
-
-  .character-frame[data-mood="worried"] img,
-  .character-frame[data-mood="lose"] img {
-    height: 465%;
-    transform: translate(-50%, -20%);
-  }
-
-  .character-frame[data-mood="panic"] img,
-  .character-frame[data-mood="shocked"] img {
-    height: 535%;
-    transform: translate(-50%, -21.8%);
   }
 }
