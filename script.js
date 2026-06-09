@@ -338,6 +338,7 @@ const startButton = document.querySelector("#startButton");
 const galleryButton = document.querySelector("#galleryButton");
 const relationResetButton = document.querySelector("#relationResetButton");
 const choiceButtons = document.querySelectorAll(".choice");
+const choiceButtonGroup = document.querySelector(".choice-buttons");
 const inputGuide = document.querySelector("#inputGuide");
 const message = document.querySelector("#message");
 const playerHand = document.querySelector("#playerHand");
@@ -370,6 +371,37 @@ const drawCount = document.querySelector("#drawCount");
 const characterFrame = document.querySelector(".character-frame");
 const characterImage = document.querySelector("#characterImage");
 const characterFallback = document.querySelector("#characterFallback");
+
+function isChoiceInputLocked(button) {
+  return !state.started || state.busy || state.ended || !button || button.disabled;
+}
+
+function shouldSuppressBrowserGesture(target) {
+  return Boolean(target?.closest?.(".cabinet"));
+}
+
+["selectstart", "dragstart"].forEach((eventName) => {
+  document.addEventListener(
+    eventName,
+    (event) => {
+      if (shouldSuppressBrowserGesture(event.target)) {
+        event.preventDefault();
+      }
+    },
+    { capture: true }
+  );
+});
+
+document.addEventListener(
+  "contextmenu",
+  (event) => {
+    if (shouldSuppressBrowserGesture(event.target)) {
+      event.preventDefault();
+    }
+  },
+  { capture: true }
+);
+
 
 const AudioManager = (() => {
   const storageKey = "jankenRetroMuted";
@@ -934,6 +966,7 @@ function triggerCinematicCutIn(type) {
 }
 
 function setButtonsEnabled(enabled) {
+  choiceButtonGroup?.classList.toggle("is-input-locked", !enabled);
   choiceButtons.forEach((button) => {
     button.disabled = !enabled;
     if (!enabled) {
@@ -977,6 +1010,11 @@ function showFinalChoiceConfirm(hand) {
 
 function handleChoiceButtonClick(hand) {
   if (!hand) {
+    return;
+  }
+
+  const button = [...choiceButtons].find((choiceButton) => choiceButton.dataset.hand === hand);
+  if (isChoiceInputLocked(button)) {
     return;
   }
 
@@ -3586,27 +3624,55 @@ muteButton.addEventListener("click", () => {
 });
 
 choiceButtons.forEach((button) => {
-  button.addEventListener("pointerdown", () => {
-    if (button.disabled || state.busy) {
+  const isLocked = () => isChoiceInputLocked(button);
+
+  button.addEventListener("pointerdown", (event) => {
+    if (isLocked()) {
+      event.preventDefault();
+      event.stopPropagation();
       return;
     }
 
     button.classList.add("is-pressing");
   });
 
-  button.addEventListener("pointerup", () => {
+  button.addEventListener("pointerup", (event) => {
+    if (isLocked()) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     clearChoicePressState(button);
   });
 
-  button.addEventListener("pointercancel", () => {
+  button.addEventListener("pointercancel", (event) => {
+    if (isLocked()) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     clearChoicePressState(button);
   });
 
-  button.addEventListener("pointerleave", () => {
+  button.addEventListener("pointerleave", (event) => {
+    if (isLocked()) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     clearChoicePressState(button);
   });
 
-  button.addEventListener("click", () => {
+  button.addEventListener("click", (event) => {
+    if (isLocked()) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     handleChoiceButtonClick(button.dataset.hand);
   });
 });

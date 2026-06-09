@@ -64,6 +64,22 @@ button {
 .cabinet img {
   -webkit-user-drag: none;
   user-drag: none;
+  pointer-events: none;
+}
+
+.scoreboard,
+.scoreboard *,
+.message,
+.message *,
+.result-label,
+.result-label *,
+.hand-card,
+.hand-card *,
+.input-guide,
+.input-guide * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .cabinet {
@@ -185,8 +201,8 @@ button {
 
 .mute-button {
   position: absolute;
-  top: 86px;
-  right: 17px;
+  top: calc(86px + env(safe-area-inset-top));
+  right: calc(17px + env(safe-area-inset-right));
   z-index: 12;
   min-width: 72px;
   min-height: 28px;
@@ -1110,6 +1126,14 @@ button {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
+}
+
+.choice-buttons.is-input-locked {
+  pointer-events: none;
+}
+
+.choice-buttons.is-input-locked .choice {
+  pointer-events: none;
 }
 
 .choice {
