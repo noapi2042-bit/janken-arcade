@@ -53,6 +53,19 @@ button {
   user-select: none;
 }
 
+.cabinet,
+.cabinet * {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.cabinet img {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
 .cabinet {
   position: relative;
   isolation: isolate;
