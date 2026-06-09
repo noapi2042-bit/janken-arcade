@@ -19,6 +19,9 @@ Internal moods such as `win`, `draw`, and `shocked` are mapped to the existing 7
 - `scene_intro.png`
 - `scene_player_win.png`
 - `scene_player_lose.png`
+- `scene_chance_win.png` (optional gallery ending)
+- `scene_final_win.png` (optional gallery ending)
+- `scene_true_end.png` (optional gallery ending)
 
 ## Hand Icons
 

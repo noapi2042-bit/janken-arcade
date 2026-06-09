@@ -21,19 +21,57 @@ const sceneImages = {
   intro: "assets/images/scene_intro.png",
   playerWin: "assets/images/scene_player_win.png",
   playerLose: "assets/images/scene_player_lose.png",
+  chanceWin: "assets/images/scene_chance_win.png",
+  finalWin: "assets/images/scene_final_win.png",
+  trueEnd: "assets/images/scene_true_end.png",
 };
 
 const galleryItems = [
-  { title: "Normal", src: "assets/images/character_normal.png", type: "character" },
-  { title: "Happy", src: "assets/images/character_happy.png", type: "character" },
-  { title: "Smug", src: "assets/images/character_smug.png", type: "character" },
-  { title: "Worried", src: "assets/images/character_worried.png", type: "character" },
-  { title: "Panic", src: "assets/images/character_panic.png", type: "character" },
-  { title: "Excited", src: "assets/images/character_excited.png", type: "character" },
-  { title: "Lose", src: "assets/images/character_lose.png", type: "character" },
-  { title: "Opening Scene", src: "assets/images/scene_intro.png", type: "scene" },
-  { title: "Player Win Scene", src: "assets/images/scene_player_win.png", type: "scene" },
-  { title: "Player Lose Scene", src: "assets/images/scene_player_lose.png", type: "scene" },
+  {
+    id: "normalWin",
+    title: "Normal Clear",
+    lockedTitle: "????",
+    src: "assets/images/scene_player_win.png",
+    type: "ending",
+    unlockText: "普通に10勝して勝利する",
+  },
+  {
+    id: "gameOver",
+    title: "Game Over",
+    lockedTitle: "????",
+    src: "assets/images/scene_player_lose.png",
+    fallbackSrc: "assets/images/scene_player_win.png",
+    type: "ending",
+    unlockText: "10敗後、CONTINUEせずにGAME OVERを見る",
+  },
+  {
+    id: "chanceWin",
+    title: "Chance Time Clear",
+    lockedTitle: "????",
+    src: "assets/images/scene_chance_win.png",
+    fallbackSrc: "assets/images/scene_player_win.png",
+    type: "ending",
+    unlockText: "あいこ10回後の2ポイント制で勝利する",
+  },
+  {
+    id: "finalWin",
+    title: "Final Janken Clear",
+    lockedTitle: "????",
+    src: "assets/images/scene_final_win.png",
+    fallbackSrc: "assets/images/scene_player_win.png",
+    type: "ending",
+    unlockText: "あいこ15回後のファイナルじゃんけんで勝利する",
+  },
+  {
+    id: "trueEnd",
+    title: "TRUE END",
+    lockedTitle: "LOCKED",
+    src: "assets/images/scene_true_end.png",
+    fallbackSrc: "assets/images/scene_player_win.png",
+    type: "trueEnd",
+    unlockText: "ギャラリー100%で解放",
+    requiresComplete: true,
+  },
 ];
 
 const imageCache = new Map();
@@ -44,6 +82,13 @@ let resultLabelTimer = null;
 let startupAssetsReady = null;
 let messageTypingTimer = null;
 let messageTypingId = 0;
+let sceneTypingTimer = null;
+let sceneTypingId = 0;
+let sceneCurrentFullText = "";
+let sceneCurrentDone = false;
+let sceneTypingResolve = null;
+let sceneAdvanceResolve = null;
+let sceneDialogActive = false;
 let characterBeatId = 0;
 let cutInTimer = null;
 let galleryIndex = 0;
@@ -64,6 +109,7 @@ const FINAL_JANKEN_ENTRY_LINES = ["ファイナルじゃんけん！", "次に�
 const FINAL_JANKEN_IDLE_LINES = ["次で決まるよ…！", "勝った方が勝ち！", "最後の勝負だよ！"];
 const FINAL_CONFIRM_LINES = ["本当にそれでいく？", "同じ手でもう一度！", "それで決める？"];
 const PSYCH_EVENT_CHANCE = 0.12;
+const POST_TRUE_DRAW_RECORD_KEY = "jankenPostTrueDrawRecordV1";
 const HAND_NAMES = {
   rock: "グー",
   scissors: "チョキ",
@@ -142,6 +188,117 @@ const dialogue = {
 
 const endgameLines = ["もうすぐ決まる...", "ここが山場！", "気を抜けないよ！"];
 
+const GALLERY_PROGRESS_KEY = "jankenGalleryProgressV3";
+const GALLERY_ROUTE_KEYS = ["normalWin", "gameOver", "chanceWin", "finalWin"];
+const TRUE_END_UNLOCK_LINES = ["……全部、見つけてくれたんだね。", "それなら、ほんとのことを話すね。"];
+const TRUE_END_LINES = [
+  "……全部、\n見つけてくれたんだね。",
+  "普通に勝った時も、",
+  "チャンスタイムも、",
+  "最後の一発勝負まで……",
+  "ちゃんと来てくれた。",
+  "ほんとはね、",
+  "少しだけ気づいてほしかったの。",
+  "どうして私が、",
+  "あいこを続けたがってたのか。",
+  "勝っても、負けても、",
+  "そこで終わっちゃうでしょ？",
+  "でも、あいこなら……",
+  "もう一回って言えるから。",
+  "もう少しだけ、",
+  "一緒にいられるから。",
+  "同じ手を出すのって、",
+  "同じ気持ちになれたみたいで、",
+  "少し嬉しかったんだ。",
+  "だから、最後まで付き合ってくれて……",
+  "ありがとう。",
+  "あなたとするじゃんけん、",
+  "私……好き。",
+  "今度は、勝負じゃなくて。",
+  "また、最初のあいこから始めよう？",
+  "TRUE END\nまた、あいこから始めよう",
+];
+const DRAW_ROUTE_HINT_LINES = [
+  "同じ手なら\nまだ続くよ。",
+  "合わせてくれる？",
+  "もう少しだけ\n続けたいかも。",
+];
+const CHANCE_ROUTE_HINT_LINES = [
+  "この先も\nまだあるよ。",
+  "私の手、\nよく見てね。",
+  "終わらせないなら\n合わせてみて？",
+];
+const FINAL_ROUTE_HINT_LINES = [
+  "あと少しで\n最後の勝負だよ。",
+  "ここまで来たなら\nあと少し付き合って。",
+  "あいこ15回まで\n届くかも。",
+];
+
+function getDefaultGalleryProgress() {
+  return {
+    normalWin: false,
+    gameOver: false,
+    chanceWin: false,
+    finalWin: false,
+    trueEndSeen: false,
+  };
+}
+
+function sanitizeGalleryProgress(value) {
+  const source = value && typeof value === "object" ? value : {};
+
+  return {
+    normalWin: source.normalWin === true,
+    gameOver: source.gameOver === true,
+    chanceWin: source.chanceWin === true,
+    finalWin: source.finalWin === true,
+    trueEndSeen: source.trueEndSeen === true,
+  };
+}
+
+function loadGalleryProgress() {
+  try {
+    const raw = window.localStorage.getItem(GALLERY_PROGRESS_KEY);
+    if (!raw) {
+      return getDefaultGalleryProgress();
+    }
+
+    return sanitizeGalleryProgress(JSON.parse(raw));
+  } catch (error) {
+    return getDefaultGalleryProgress();
+  }
+}
+
+function saveGalleryProgress(progress) {
+  try {
+    window.localStorage.setItem(GALLERY_PROGRESS_KEY, JSON.stringify(sanitizeGalleryProgress(progress)));
+  } catch (error) {
+    // localStorage may be unavailable in private or restricted browsers.
+  }
+}
+
+function loadPostTrueDrawRecord() {
+  try {
+    const raw = window.localStorage.getItem(POST_TRUE_DRAW_RECORD_KEY);
+    const value = Number.parseInt(raw || "0", 10);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  } catch (error) {
+    return 0;
+  }
+}
+
+function savePostTrueDrawRecord(value) {
+  try {
+    window.localStorage.setItem(POST_TRUE_DRAW_RECORD_KEY, String(Math.max(0, value || 0)));
+  } catch (error) {
+    // Storage errors should not stop the game.
+  }
+}
+
+function getPostTrueDrawRecord() {
+  return loadPostTrueDrawRecord();
+}
+
 const state = {
   started: false,
   busy: false,
@@ -153,6 +310,8 @@ const state = {
   drawWarningShown: false,
   finalJanken: false,
   finalConfirmHand: null,
+  routeReachedChance: false,
+  routeReachedFinal: false,
   psychEvent: null,
   nextCallMode: "normal",
   countdownTimer: null,
@@ -162,9 +321,14 @@ const state = {
   debugPanelVisible: false,
   debugSoundTaps: [],
   galleryUnlockedSession: false,
-  galleryJustUnlocked: false,
+  galleryJustUnlockedId: null,
+  galleryProgress: loadGalleryProgress(),
+  trueEndingQueued: false,
+  showingTrueEnding: false,
   inputGuideShownOnce: false,
   inputGuideVisible: false,
+  postTrueRecordAnnounced: false,
+  postTrueNewRecordShownFor: 0,
   lastLine: "",
   flowId: 0,
 };
@@ -172,6 +336,7 @@ const state = {
 const cabinet = document.querySelector(".cabinet");
 const startButton = document.querySelector("#startButton");
 const galleryButton = document.querySelector("#galleryButton");
+const relationResetButton = document.querySelector("#relationResetButton");
 const choiceButtons = document.querySelectorAll(".choice");
 const inputGuide = document.querySelector("#inputGuide");
 const message = document.querySelector("#message");
@@ -189,8 +354,11 @@ const sceneIllustration = document.querySelector("#sceneIllustration");
 const sceneCharacterImage = document.querySelector("#sceneCharacterImage");
 const sceneCharacterFallback = document.querySelector("#sceneCharacterFallback");
 const sceneMessage = document.querySelector("#sceneMessage");
+const sceneNextButton = document.querySelector("#sceneNextButton");
 const galleryOverlay = document.querySelector("#galleryOverlay");
 const galleryImage = document.querySelector("#galleryImage");
+const galleryLocked = document.querySelector("#galleryLocked");
+const galleryProgress = document.querySelector("#galleryProgress");
 const galleryCaption = document.querySelector("#galleryCaption");
 const galleryCounter = document.querySelector("#galleryCounter");
 const galleryCloseButton = document.querySelector("#galleryCloseButton");
@@ -209,21 +377,30 @@ const AudioManager = (() => {
     normal: "assets/sounds/bgm_loop.mp3",
     chance: "assets/sounds/bgm_chance.mp3",
     final: "assets/sounds/bgm_final.mp3",
+    trueEnd: "assets/sounds/bgm_true_end.mp3",
   };
   const bgmVolumes = {
     normal: 0.25,
     chance: 0.3,
     final: 0.32,
+    trueEnd: 0.34,
   };
   const sfxPaths = {
     cutin: "assets/sounds/cutin_stinger.mp3",
+    jankenCall: "assets/sounds/se_janken_call.mp3",
   };
   let context = null;
   let normalBgm = null;
   let chanceBgm = null;
   let finalBgm = null;
+  let trueEndBgm = null;
   let cutinSfx = null;
+  let jankenCallSfxPool = [];
+  let jankenCallSfxIndex = 0;
+  let chanceBgmFailed = false;
   let finalBgmFailed = false;
+  let trueEndBgmFailed = false;
+  let jankenCallSfxFailed = false;
   let currentBgmMode = null;
   let lastCutinSfxAt = 0;
   let muted = false;
@@ -248,6 +425,10 @@ const AudioManager = (() => {
         finalBgm = createBgm("final");
       }
 
+      if (!trueEndBgm) {
+        trueEndBgm = createBgm("trueEnd");
+      }
+
       if (!context) {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         if (AudioContext) {
@@ -267,12 +448,32 @@ const AudioManager = (() => {
     audio.addEventListener(
       "error",
       () => {
+        if (mode === "trueEnd") {
+          console.warn("True End BGM not found: assets/sounds/bgm_true_end.mp3");
+          trueEndBgmFailed = true;
+          if (currentBgmMode === "trueEnd") {
+            currentBgmMode = null;
+            switchBgm("final");
+          }
+          return;
+        }
+
         if (mode === "final") {
           console.warn("Final BGM not found: assets/sounds/bgm_final.mp3");
           finalBgmFailed = true;
           if (currentBgmMode === "final") {
             currentBgmMode = null;
             switchBgm("chance");
+          }
+          return;
+        }
+
+        if (mode === "chance") {
+          console.warn("Chance BGM not found: assets/sounds/bgm_chance.mp3");
+          chanceBgmFailed = true;
+          if (currentBgmMode === "chance") {
+            currentBgmMode = null;
+            switchBgm("normal");
           }
         }
       },
@@ -295,21 +496,62 @@ const AudioManager = (() => {
     return audio;
   }
 
-  function normalizeBgmMode(mode) {
-    if (mode === "final") {
-      return finalBgmFailed ? "chance" : "final";
-    }
-
-    return mode === "chance" ? "chance" : "normal";
+  function createOneShotSfx(path, volume = 0.72) {
+    const audio = new Audio(path);
+    audio.preload = "auto";
+    audio.volume = volume;
+    return audio;
   }
 
-  function bgmForMode(mode) {
+  function initJankenCallSfx() {
+    if (jankenCallSfxPool.length || jankenCallSfxFailed) {
+      return;
+    }
+
+    try {
+      jankenCallSfxPool = Array.from({ length: 3 }, () => {
+        const audio = createOneShotSfx(sfxPaths.jankenCall, 0.68);
+        audio.addEventListener(
+          "error",
+          () => {
+            jankenCallSfxFailed = true;
+          },
+          { once: true }
+        );
+        return audio;
+      });
+    } catch (error) {
+      jankenCallSfxFailed = true;
+    }
+  }
+
+  function normalizeBgmMode(mode) {
+    if (mode === "trueEnd") {
+      return trueEndBgmFailed ? normalizeBgmMode("final") : "trueEnd";
+    }
+
     if (mode === "final") {
-      return finalBgmFailed ? chanceBgm : finalBgm;
+      return finalBgmFailed ? normalizeBgmMode("chance") : "final";
     }
 
     if (mode === "chance") {
-      return chanceBgm;
+      return chanceBgmFailed ? "normal" : "chance";
+    }
+
+    return "normal";
+  }
+
+  function bgmForMode(mode) {
+    if (mode === "trueEnd") {
+      return trueEndBgmFailed ? bgmForMode("final") : trueEndBgm;
+    }
+
+    if (mode === "final") {
+      return finalBgmFailed ? bgmForMode("chance") : finalBgm;
+    }
+
+    if (mode === "chance") {
+      return chanceBgmFailed ? normalBgm : chanceBgm;
     }
 
     return normalBgm;
@@ -337,11 +579,27 @@ const AudioManager = (() => {
       currentBgmMode = normalizeBgmMode(mode);
       bgm.volume = bgmVolumes[currentBgmMode];
       bgm.play().catch(() => {
+        if (currentBgmMode === "trueEnd") {
+          console.warn("True End BGM not found: assets/sounds/bgm_true_end.mp3");
+          trueEndBgmFailed = true;
+          currentBgmMode = null;
+          switchBgm("final");
+          return;
+        }
+
         if (currentBgmMode === "final") {
           console.warn("Final BGM not found: assets/sounds/bgm_final.mp3");
           finalBgmFailed = true;
           currentBgmMode = null;
           switchBgm("chance");
+          return;
+        }
+
+        if (currentBgmMode === "chance") {
+          console.warn("Chance BGM not found: assets/sounds/bgm_chance.mp3");
+          chanceBgmFailed = true;
+          currentBgmMode = null;
+          switchBgm("normal");
         }
       });
     } catch (error) {
@@ -374,7 +632,7 @@ const AudioManager = (() => {
 
   function stopBgm() {
     try {
-      [normalBgm, chanceBgm, finalBgm].forEach((bgm) => {
+      [normalBgm, chanceBgm, finalBgm, trueEndBgm].forEach((bgm) => {
         if (!bgm) {
           return;
         }
@@ -451,6 +709,33 @@ const AudioManager = (() => {
     }
   }
 
+  function playJankenCallSfx(fallbackType = "call1") {
+    try {
+      if (muted) {
+        return;
+      }
+
+      initAudio();
+      initJankenCallSfx();
+
+      if (jankenCallSfxFailed || !jankenCallSfxPool.length) {
+        playSound(fallbackType);
+        return;
+      }
+
+      const audio = jankenCallSfxPool[jankenCallSfxIndex % jankenCallSfxPool.length];
+      jankenCallSfxIndex += 1;
+      audio.pause();
+      audio.currentTime = 0;
+      audio.volume = fallbackType === "call3" ? 0.76 : 0.66;
+      audio.play().catch(() => {
+        playSound(fallbackType);
+      });
+    } catch (error) {
+      playSound(fallbackType);
+    }
+  }
+
   function playCutinSfx() {
     try {
       if (muted) {
@@ -487,6 +772,14 @@ const AudioManager = (() => {
 
     if (muted) {
       stopBgm();
+      jankenCallSfxPool.forEach((sfx) => {
+        try {
+          sfx.pause();
+          sfx.currentTime = 0;
+        } catch (error) {
+          // One-shot sound is optional.
+        }
+      });
       if (cutinSfx) {
         try {
           cutinSfx.pause();
@@ -497,7 +790,9 @@ const AudioManager = (() => {
       }
     } else {
       resumeContext();
-      if (state.started && !state.ended) {
+      if (state.showingTrueEnding) {
+        playBgm("trueEnd");
+      } else if (state.started && !state.ended) {
         playBgm(state.finalJanken ? "final" : state.chance ? "chance" : "normal");
       }
     }
@@ -524,6 +819,7 @@ const AudioManager = (() => {
     switchBgm,
     stopBgm,
     playSound,
+    playJankenCallSfx,
     playCutinSfx,
     setMuted,
     toggleMute,
@@ -640,6 +936,9 @@ function triggerCinematicCutIn(type) {
 function setButtonsEnabled(enabled) {
   choiceButtons.forEach((button) => {
     button.disabled = !enabled;
+    if (!enabled) {
+      button.classList.remove("is-pressing");
+    }
   });
 }
 
@@ -681,6 +980,7 @@ function handleChoiceButtonClick(hand) {
     return;
   }
 
+  clearChoicePressState();
   hideInputGuide();
 
   if (state.finalJanken && !state.busy && !state.ended) {
@@ -701,8 +1001,66 @@ function handleChoiceButtonClick(hand) {
   playRound(hand);
 }
 
+function getGalleryProgress() {
+  return sanitizeGalleryProgress(state.galleryProgress);
+}
+
+function hasAnyGalleryUnlock() {
+  const progress = getGalleryProgress();
+  return Boolean(progress.normalWin || progress.gameOver || progress.chanceWin || progress.finalWin || progress.trueEndSeen);
+}
+
+function isGalleryButtonAvailable() {
+  return hasAnyGalleryUnlock() || state.galleryUnlockedSession === true;
+}
+
 function isGalleryUnlocked() {
-  return Boolean(state.galleryUnlockedSession);
+  return isGalleryButtonAvailable();
+}
+
+function getGalleryCompletionPercent() {
+  const progress = getGalleryProgress();
+  const unlockedCount = GALLERY_ROUTE_KEYS.filter((key) => progress[key]).length;
+  return Math.round((unlockedCount / GALLERY_ROUTE_KEYS.length) * 100);
+}
+
+function isGalleryComplete() {
+  const progress = getGalleryProgress();
+  return GALLERY_ROUTE_KEYS.every((key) => progress[key]);
+}
+
+function getMissingGalleryRoutes(progress = getGalleryProgress()) {
+  return GALLERY_ROUTE_KEYS.filter((routeId) => progress[routeId] !== true);
+}
+
+function getNextTargetRoute(progress = getGalleryProgress()) {
+  if (!progress.normalWin) {
+    return "normalWin";
+  }
+
+  if (!progress.gameOver) {
+    return "gameOver";
+  }
+
+  if (!progress.chanceWin) {
+    return "chanceWin";
+  }
+
+  if (!progress.finalWin) {
+    return "finalWin";
+  }
+
+  return "complete";
+}
+
+function isGalleryItemUnlocked(item) {
+  const progress = getGalleryProgress();
+
+  if (item.id === "trueEnd") {
+    return isGalleryComplete() || progress.trueEndSeen;
+  }
+
+  return Boolean(progress[item.id]);
 }
 
 function scheduleGalleryPreload() {
@@ -712,49 +1070,149 @@ function scheduleGalleryPreload() {
 
   galleryPreloadQueued = true;
   scheduleIdleTask(() => {
-    collectImageSources({ gallery: galleryItems.map((item) => item.src) }).forEach((src) => {
+    const unlockedSources = galleryItems
+      .filter((item) => isGalleryItemUnlocked(item))
+      .flatMap((item) => [item.src, item.fallbackSrc])
+      .filter(Boolean);
+
+    collectImageSources({ gallery: unlockedSources }).forEach((src) => {
       preloadImage(src);
     });
   }, 900);
 }
 
-function updateGalleryButton() {
-  if (!galleryButton) {
+function titleOverlayOpen() {
+  return (
+    (sceneOverlay && !sceneOverlay.hidden) ||
+    (endOverlay && !endOverlay.hidden) ||
+    (galleryOverlay && !galleryOverlay.hidden)
+  );
+}
+
+function updateRelationResetButton() {
+  if (!relationResetButton) {
     return;
   }
 
-  const shouldShow = isGalleryUnlocked() && !state.started && !state.busy && !state.ended;
-  galleryButton.hidden = !shouldShow;
+  const progress = getGalleryProgress();
+  const shouldShow =
+    progress.trueEndSeen === true &&
+    !state.started &&
+    !state.busy &&
+    !state.ended &&
+    !titleOverlayOpen() &&
+    startButton &&
+    !startButton.hidden;
 
-  if (shouldShow) {
-    scheduleGalleryPreload();
+  relationResetButton.hidden = !shouldShow;
+}
+
+function updateGalleryButton() {
+  if (!galleryButton) {
+    updateRelationResetButton();
+    return;
   }
 
-  if (shouldShow && state.galleryJustUnlocked) {
+  const shouldShow =
+    isGalleryButtonAvailable() &&
+    !state.started &&
+    !state.busy &&
+    !state.ended &&
+    !titleOverlayOpen() &&
+    startButton &&
+    !startButton.hidden;
+
+  galleryButton.hidden = !shouldShow;
+
+  if (!shouldShow) {
+    galleryButton.classList.remove("is-new");
+    updateRelationResetButton();
+    return;
+  }
+
+  scheduleGalleryPreload();
+
+  if (state.galleryJustUnlockedId) {
     galleryButton.classList.add("is-new");
     window.setTimeout(() => {
       galleryButton.classList.remove("is-new");
     }, 4200);
-    state.galleryJustUnlocked = false;
+    state.galleryJustUnlockedId = null;
   }
+
+  updateRelationResetButton();
+}
+
+function unlockGalleryRoute(routeId) {
+  if (!GALLERY_ROUTE_KEYS.includes(routeId)) {
+    return false;
+  }
+
+  const progress = getGalleryProgress();
+  const wasUnlocked = Boolean(progress[routeId]);
+
+  if (!wasUnlocked) {
+    progress[routeId] = true;
+    state.galleryJustUnlockedId = routeId;
+    state.galleryUnlockedSession = true;
+    state.galleryProgress = progress;
+    galleryPreloadQueued = false;
+    saveGalleryProgress(progress);
+  }
+
+  updateGalleryButton();
+  return !wasUnlocked;
 }
 
 function unlockGallery() {
-  const wasUnlocked = isGalleryUnlocked();
-  state.galleryUnlockedSession = true;
+  return unlockGalleryRoute("normalWin");
+}
 
-  if (!wasUnlocked) {
-    state.galleryJustUnlocked = true;
+function resetGalleryProgress() {
+  try {
+    window.localStorage.removeItem(GALLERY_PROGRESS_KEY);
+    window.localStorage.removeItem("jankenGalleryProgressV1");
+    window.localStorage.removeItem("jankenGalleryProgressV2");
+    window.localStorage.removeItem("jankenGalleryProgressV3");
+    window.localStorage.removeItem("jankenGalleryUnlocked");
+    window.localStorage.removeItem(POST_TRUE_DRAW_RECORD_KEY);
+  } catch (error) {
+    // Ignore storage errors; debug reset should never stop the game.
   }
 
+  state.galleryProgress = getDefaultGalleryProgress();
+  state.galleryUnlockedSession = false;
+  state.galleryJustUnlockedId = null;
+  state.trueEndingQueued = false;
+  state.showingTrueEnding = false;
+  state.postTrueRecordAnnounced = false;
+  state.postTrueNewRecordShownFor = 0;
+  closeGallery(false);
+  galleryPreloadQueued = false;
+  if (galleryButton) {
+    galleryButton.hidden = true;
+    galleryButton.classList.remove("is-new");
+  }
+  if (relationResetButton) {
+    relationResetButton.hidden = true;
+  }
   updateGalleryButton();
 }
 
 function lockGallery() {
-  state.galleryUnlockedSession = false;
-  state.galleryJustUnlocked = false;
-  closeGallery(false);
-  updateGalleryButton();
+  resetGalleryProgress();
+}
+
+function updateGalleryProgressText() {
+  const unlockedCount = GALLERY_ROUTE_KEYS.filter((key) => getGalleryProgress()[key]).length;
+  const percent = getGalleryCompletionPercent();
+  const text = `CLEAR RATE ${unlockedCount} / ${GALLERY_ROUTE_KEYS.length}  GALLERY ${percent}%`;
+
+  if (galleryProgress) {
+    galleryProgress.textContent = text;
+  }
+
+  return text;
 }
 
 function renderGalleryItem() {
@@ -764,37 +1222,78 @@ function renderGalleryItem() {
 
   const item = galleryItems[galleryIndex];
   const requestId = ++galleryRequestId;
-  galleryCaption.textContent = item.title;
-  galleryCounter.textContent = `${galleryIndex + 1} / ${galleryItems.length}`;
+  const unlocked = isGalleryItemUnlocked(item);
+  const progressText = updateGalleryProgressText();
+  galleryCounter.textContent = `${galleryIndex + 1} / ${galleryItems.length}   ${getGalleryCompletionPercent()}%`;
   galleryImage.hidden = true;
+  galleryImage.removeAttribute("src");
+  galleryImage.dataset.type = "";
 
-  preloadImage(item.src).then((img) => {
+  if (galleryLocked) {
+    galleryLocked.hidden = unlocked;
+    galleryLocked.textContent = unlocked ? "" : item.lockedTitle || "LOCKED";
+  }
+
+  if (!unlocked) {
+    galleryCaption.textContent = `${item.lockedTitle || "LOCKED"} / ${item.unlockText || "条件未達成"} / ${progressText}`;
+    return;
+  }
+
+  const src = item.src;
+  const fallbackSrc = item.fallbackSrc || sceneImages.playerWin;
+  galleryCaption.textContent = item.id === "trueEnd"
+    ? `${item.title} / TAP IMAGE TO REPLAY TRUE END`
+    : `${item.title} / UNLOCKED`;
+
+  preloadImage(src).then((img) => {
     if (requestId !== galleryRequestId) {
       return;
     }
 
+    const finalSrc = img ? src : fallbackSrc;
     if (!img) {
-      galleryCaption.textContent = `${item.title} / COMING SOON`;
-      galleryImage.hidden = true;
-      return;
+      console.warn("Gallery image fallback:", src);
     }
 
-    galleryImage.src = item.src;
-    galleryImage.alt = item.title;
-    galleryImage.dataset.type = item.type;
-    galleryImage.hidden = false;
+    preloadImage(finalSrc).then((fallbackImg) => {
+      if (requestId !== galleryRequestId) {
+        return;
+      }
+
+      if (!fallbackImg) {
+        galleryCaption.textContent = `${item.title} / COMING SOON`;
+        galleryImage.hidden = true;
+        if (galleryLocked) {
+          galleryLocked.hidden = false;
+          galleryLocked.textContent = "COMING SOON";
+        }
+        return;
+      }
+
+      if (galleryLocked) {
+        galleryLocked.hidden = true;
+      }
+      galleryImage.src = finalSrc;
+      galleryImage.alt = item.title;
+      galleryImage.dataset.type = item.type;
+      galleryImage.dataset.itemId = item.id || "";
+      galleryImage.hidden = false;
+    });
   });
 }
 
 function openGallery() {
   if (
-    !isGalleryUnlocked() ||
+    !isGalleryButtonAvailable() ||
     !galleryOverlay ||
     !startButton ||
     startButton.hidden ||
     state.started ||
     state.busy ||
-    state.ended
+    state.ended ||
+    (sceneOverlay && !sceneOverlay.hidden) ||
+    (endOverlay && !endOverlay.hidden) ||
+    !galleryOverlay.hidden
   ) {
     return;
   }
@@ -803,6 +1302,13 @@ function openGallery() {
   galleryOverlay.hidden = false;
   cabinet.classList.add("is-gallery-open");
   startButton.disabled = true;
+  if (galleryButton) {
+    galleryButton.hidden = true;
+    galleryButton.classList.remove("is-new");
+  }
+  if (relationResetButton) {
+    relationResetButton.hidden = true;
+  }
   renderGalleryItem();
   AudioManager.playSound("select");
 }
@@ -822,6 +1328,10 @@ function closeGallery(playSound = true) {
   if (playSound) {
     AudioManager.playSound("select");
   }
+
+  if (!state.started && !state.busy && !state.ended && startButton && !startButton.hidden) {
+    updateGalleryButton();
+  }
 }
 
 function moveGallery(step) {
@@ -832,6 +1342,22 @@ function moveGallery(step) {
   galleryIndex = (galleryIndex + step + galleryItems.length) % galleryItems.length;
   renderGalleryItem();
   AudioManager.playSound("select");
+}
+
+function replayTrueEndFromGallery() {
+  const item = galleryItems[galleryIndex];
+  if (!item || item.id !== "trueEnd" || !isGalleryItemUnlocked(item) || state.started || state.busy || state.ended) {
+    return;
+  }
+
+  closeGallery(false);
+  startButton.disabled = true;
+  showTrueEnding({ replay: true }).then(() => {
+    if (!state.started && !state.busy && !state.ended) {
+      startButton.disabled = false;
+      updateGalleryButton();
+    }
+  });
 }
 
 function toggleDebugMode(force) {
@@ -859,9 +1385,23 @@ function createDebugPanel() {
   panel.className = "debug-panel";
   panel.setAttribute("aria-label", "Debug panel");
 
+  const header = document.createElement("div");
+  header.className = "debug-header";
+
   const title = document.createElement("strong");
   title.textContent = "DEBUG";
-  panel.append(title);
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "debug-close-button";
+  closeButton.textContent = "×";
+  closeButton.setAttribute("aria-label", "デバッグパネルを閉じる");
+  closeButton.addEventListener("click", () => {
+    toggleDebugMode(false);
+  });
+
+  header.append(title, closeButton);
+  panel.append(header);
 
   [
     ["DRAW 4", () => debugSetDraw(4)],
@@ -875,8 +1415,15 @@ function createDebugPanel() {
     ["FINAL CUTIN", () => triggerCinematicCutIn("final")],
     ["NEXT PLAYER WIN", () => debugForceNextResult("win")],
     ["NEXT CPU WIN", () => debugForceNextResult("lose")],
-    ["UNLOCK GALLERY", unlockGallery],
-    ["LOCK GALLERY", lockGallery],
+    ["UNLOCK NORMAL", () => debugUnlockGalleryRoute("normalWin")],
+    ["UNLOCK GAME OVER", () => debugUnlockGalleryRoute("gameOver")],
+    ["UNLOCK CHANCE", () => debugUnlockGalleryRoute("chanceWin")],
+    ["UNLOCK FINAL", () => debugUnlockGalleryRoute("finalWin")],
+    ["RESET GALLERY", resetGalleryProgress],
+    ["SHOW TRUE END", () => showTrueEnding({ replay: true })],
+    ["FORCE ROUTE NORMAL WIN", () => debugForceRouteWin("normalWin")],
+    ["FORCE ROUTE CHANCE WIN", () => debugForceRouteWin("chanceWin")],
+    ["FORCE ROUTE FINAL WIN", () => debugForceRouteWin("finalWin")],
     ["RESET DEBUG", debugReset],
   ].forEach(([label, handler]) => {
     const button = document.createElement("button");
@@ -908,6 +1455,7 @@ function debugForceChance() {
   state.draw = Math.max(state.draw, CHANCE_DRAW_COUNT);
   state.drawWarningShown = true;
   state.finalConfirmHand = null;
+  state.routeReachedChance = true;
   setChanceMode(true);
   updateScore();
   setCharacter("excited");
@@ -920,6 +1468,8 @@ function debugForceFinal() {
   state.draw = Math.max(state.draw, FINAL_DRAW_COUNT);
   state.drawWarningShown = true;
   state.finalConfirmHand = null;
+  state.routeReachedChance = true;
+  state.routeReachedFinal = true;
   setChanceMode(true);
   setFinalJankenMode(true);
   updateScore();
@@ -932,6 +1482,25 @@ function debugForceFinal() {
 function debugForceNextResult(result) {
   state.debugForceNextResult = result;
   showMessage(result === "win" ? "DEBUG NEXT WIN" : "DEBUG NEXT LOSE");
+}
+
+function debugUnlockGalleryRoute(routeId) {
+  unlockGalleryRoute(routeId);
+  showMessage(`DEBUG UNLOCK ${routeId}`);
+  updateGalleryButton();
+}
+
+function debugForceRouteWin(routeId) {
+  state.routeReachedChance = routeId === "chanceWin" || routeId === "finalWin";
+  state.routeReachedFinal = routeId === "finalWin";
+  unlockGalleryRoute(routeId);
+
+  if (isGalleryComplete() && !getGalleryProgress().trueEndSeen) {
+    state.trueEndingQueued = true;
+  }
+
+  showMessage(`DEBUG ROUTE ${routeId}`);
+  updateGalleryButton();
 }
 
 function debugReset() {
@@ -960,6 +1529,13 @@ function trackDebugToggleTap() {
   }
 
   return false;
+}
+
+function clearChoicePressState(targetButton = null) {
+  const buttons = targetButton ? [targetButton] : choiceButtons;
+  buttons.forEach((button) => {
+    button.classList.remove("is-pressing");
+  });
 }
 
 function setSelectedButton(hand) {
@@ -1062,12 +1638,116 @@ function randomLine(lines) {
   return line;
 }
 
+function getRelationshipPhase() {
+  const progress = getGalleryProgress();
+
+  if (progress.trueEndSeen) {
+    return "afterTrueEnd";
+  }
+
+  if (state.finalJanken || state.draw >= FINAL_DRAW_COUNT) {
+    return "final";
+  }
+
+  if (state.draw >= CHANCE_DRAW_COUNT || getNextTargetRoute() === "finalWin") {
+    return "near";
+  }
+
+  if (state.draw >= DRAW_WARNING_COUNT || getNextTargetRoute() === "chanceWin") {
+    return "aware";
+  }
+
+  return "battle";
+}
+
+function routeHintLinesForCurrentTarget() {
+  const phase = getRelationshipPhase();
+  const targetRoute = getNextTargetRoute();
+
+  if (phase === "afterTrueEnd") {
+    return ["また同じ手、出せるかな。", "今度は勝負じゃなくてもいいよ。", "手、見なくてもわかるかも。", "また、あいこから始めよ？"];
+  }
+
+  if (targetRoute === "finalWin" || phase === "final" || phase === "near") {
+    return ["まだ終わらせたくないかも。", "同じ手なら、もう少し続くよ。", "私の手、ちゃんと見てて。", "気持ち、読める？"];
+  }
+
+  if (targetRoute === "chanceWin" || phase === "aware") {
+    return ["同じ手なら、まだ続くよ。", "合わせてくれる？", "私の手、見ててね。", "もう少しだけ続けたいかも。"];
+  }
+
+  return [];
+}
+
+function postTrueStartLine() {
+  const record = getPostTrueDrawRecord();
+
+  if (record > 0) {
+    return `今のあいこ記録は${record}回だよ。\n今日は超えられるかな？`;
+  }
+
+  return "今度は勝負じゃなくて、\nどこまであいこできるか試してみよ？";
+}
+
+function showPostTrueStartMessage() {
+  if (!getGalleryProgress().trueEndSeen || state.postTrueRecordAnnounced) {
+    return false;
+  }
+
+  state.postTrueRecordAnnounced = true;
+  setCharacter("happy");
+  showMessage(postTrueStartLine(), undefined, {
+    typewriter: true,
+    maxDuration: 900,
+  });
+  return true;
+}
+
+function checkPostTrueDrawRecord() {
+  if (!getGalleryProgress().trueEndSeen) {
+    return false;
+  }
+
+  const currentDraws = state.draw;
+  const record = getPostTrueDrawRecord();
+
+  if (currentDraws <= record) {
+    return false;
+  }
+
+  savePostTrueDrawRecord(currentDraws);
+  state.postTrueNewRecordShownFor = currentDraws;
+  return true;
+}
+
+function postTrueNewRecordLine() {
+  const currentDraws = state.draw;
+
+  if (currentDraws >= 20) {
+    return `すごい……${currentDraws}回目。\nもう言わなくても合うね。`;
+  }
+
+  if (currentDraws >= 15) {
+    return `${currentDraws}回目のあいこ……\nまだ一緒にいられるね。`;
+  }
+
+  if (currentDraws >= 10) {
+    return `新記録、${currentDraws}回だよ。\n気持ち、合ってきたね。`;
+  }
+
+  return `新記録！ ${currentDraws}回目のあいこだよ。`;
+}
+
 function lineFor(scene) {
   const set = currentDialogue();
   const lines = [...(set[scene] || dialogue.even[scene] || [])];
 
   if ((state.win >= 8 || state.lose >= 8) && scene === "idle") {
     lines.push(...endgameLines);
+  }
+
+  if (scene === "idle" && Math.random() < 0.34) {
+    lines.push(...routeHintLinesForCurrentTarget());
   }
 
   return randomLine(lines);
@@ -1077,24 +1757,288 @@ function handName(handKey) {
   return HAND_NAMES[handKey] || hands[handKey]?.label || "?";
 }
 
+function predictionLinesForHand(handKey) {
+  const name = handName(handKey);
+  const phase = getRelationshipPhase();
+
+  if (phase === "afterTrueEnd") {
+    return [
+      `次は${name}。……わかるよね？`,
+      `${name}で待ってるね。`,
+      `同じ気持ちなら、${name}だよ。`,
+      `言わなくても、${name}って伝わるかな。`,
+      `また、${name}で重なれたら嬉しいな。`,
+    ];
+  }
+
+  if (phase === "final") {
+    return [
+      `次は${name}。……たぶん本当だよ。`,
+      `${name}で来てくれたら、まだ続くかも。`,
+      `最後くらい、${name}で合わせてみる？`,
+      `終わらせたくないなら、${name}を見て。`,
+    ];
+  }
+
+  if (phase === "near") {
+    return [
+      `次は${name}にしようかな。`,
+      `${name}……って言ったら、信じる？`,
+      `私の手、${name}に見える？`,
+      `${name}で来たら、気が合うかも。`,
+    ];
+  }
+
+  if (phase === "aware") {
+    return [
+      `${name}を出すかも？`,
+      `次は${name}……かもしれないよ。`,
+      `${name}って、少し気になるかも。`,
+      "私の手、ちゃんと見ててね。",
+    ];
+  }
+
+  return [`次は${name}でいくよ？`, `${name}を出すかも？`, "読めるかな？", "次は負けないよ。"];
+}
+
+function requestLinesForHand(handKey) {
+  const name = handName(handKey);
+  const phase = getRelationshipPhase();
+
+  if (phase === "afterTrueEnd") {
+    return [
+      `${name}で来て。私も、たぶん同じだから。`,
+      `同じ手で来てくれる？ ${name}がいいな。`,
+      `${name}で会えたら、嬉しい。`,
+      `また一緒に、${name}から始めよ？`,
+    ];
+  }
+
+  if (phase === "final") {
+    return [`${name}で来てくれる？`, `まだ続けたいなら、${name}を出して。`, `${name}なら、もう少し一緒にいられるかも。`];
+  }
+
+  if (phase === "near") {
+    return [`${name}、見たいな。`, `次、${name}で来てみる？`, "同じ手でも、いいかも。"];
+  }
+
+  if (phase === "aware") {
+    return [`${name}を出してほしいな♪`, `次は${name}で来て？`, `${name}、見てみたいな。`];
+  }
+
+  return [`${name}で来る？`, `${name}を出すのかな？`, "さあ、何を出す？"];
+}
+
+function quietPredictionLinesForHand(handKey) {
+  const name = handName(handKey);
+  const phase = getRelationshipPhase();
+
+  if (phase === "afterTrueEnd") {
+    return [
+      `${name}……だよね？`,
+      `言わなくても、${name}かなって思った。`,
+      `同じなら、${name}で。`,
+      `${name}で重なれたら嬉しいな。`,
+    ];
+  }
+
+  if (phase === "final") {
+    return [
+      `${name}、見てて。`,
+      `たぶん、${name}。`,
+      `${name}で来たら……続くかも。`,
+      `終わらせたくないなら、${name}。`,
+    ];
+  }
+
+  if (phase === "near") {
+    return [`${name}にしようかな。`, `${name}って言ったら、信じる？`, `私の手、${name}に見える？`];
+  }
+
+  if (phase === "aware") {
+    return [`${name}かも。`, `次、${name}かな。`, "私の手、見ててね。"];
+  }
+
+  return ["次はどうしようかな。", "読める？", `${name}かもね。`];
+}
+
 function psychEventLine(event) {
   if (!event) {
     return "";
   }
 
-  if (event.type === "predict") {
-    return randomLine([
-      `次は${handName(event.cpuHand)}でいくよ！`,
-      `${handName(event.cpuHand)}を出すかも？`,
-      `私の次の手は${handName(event.cpuHand)}！`,
-    ]);
+  if (event.presentation === "quiet") {
+    const hand = event.type === "predict"
+      ? event.predictedHand || event.cpuHand
+      : event.requestedHand || event.cpuHand;
+    return randomLine(quietPredictionLinesForHand(hand));
   }
 
-  return randomLine([
-    `${handName(event.requestedHand)}を出してほしいな♪`,
-    `次は${handName(event.requestedHand)}で来て？`,
-    `${handName(event.requestedHand)}、見たいな♪`,
-  ]);
+  if (event.type === "predict") {
+    return randomLine(predictionLinesForHand(event.predictedHand || event.cpuHand));
+  }
+
+  return randomLine(requestLinesForHand(event.requestedHand || event.cpuHand));
+}
+
+function getPredictionHonestyRate() {
+  if (state.finalJanken) {
+    return 0.58;
+  }
+
+  const progress = getGalleryProgress();
+  const targetRoute = getNextTargetRoute();
+  const trueEndSeen = progress.trueEndSeen === true;
+
+  if (trueEndSeen) {
+    if (state.draw >= 10) {
+      return 0.98;
+    }
+
+    if (state.draw >= 5) {
+      return 0.94;
+    }
+
+    return 0.88;
+  }
+
+  if (targetRoute === "normalWin" || targetRoute === "gameOver") {
+    if (state.draw >= 5) {
+      return 0.42;
+    }
+
+    return 0.28;
+  }
+
+  if (targetRoute === "chanceWin") {
+    if (state.draw >= 8) {
+      return 0.84;
+    }
+
+    if (state.draw >= 5) {
+      return 0.68;
+    }
+
+    return 0.5;
+  }
+
+  if (targetRoute === "finalWin") {
+    if (state.draw >= 12) {
+      return 0.96;
+    }
+
+    if (state.draw >= 10) {
+      return 0.9;
+    }
+
+    if (state.draw >= 8) {
+      return 0.78;
+    }
+
+    return 0.64;
+  }
+
+  return 0.45;
+}
+
+function getPsychEventChance() {
+  if (state.finalJanken) {
+    return 0;
+  }
+
+  const progress = getGalleryProgress();
+  const targetRoute = getNextTargetRoute();
+  const trueEndSeen = progress.trueEndSeen === true;
+
+  if (trueEndSeen) {
+    if (state.draw >= 10) {
+      return 0.62;
+    }
+
+    if (state.draw >= 5) {
+      return 0.5;
+    }
+
+    return 0.36;
+  }
+
+  if (targetRoute === "normalWin" || targetRoute === "gameOver") {
+    if (state.draw >= 5) {
+      return 0.16;
+    }
+
+    return 0.08;
+  }
+
+  if (targetRoute === "chanceWin") {
+    if (state.draw >= 8) {
+      return 0.38;
+    }
+
+    if (state.draw >= 5) {
+      return 0.28;
+    }
+
+    return 0.16;
+  }
+
+  if (targetRoute === "finalWin") {
+    if (state.draw >= 12) {
+      return 0.52;
+    }
+
+    if (state.draw >= 10) {
+      return 0.44;
+    }
+
+    if (state.draw >= 8) {
+      return 0.34;
+    }
+
+    return 0.22;
+  }
+
+  return PSYCH_EVENT_CHANCE;
+}
+
+function getPsychEventType() {
+  const progress = getGalleryProgress();
+
+  if (progress.trueEndSeen) {
+    return Math.random() < 0.85 ? "predict" : "request";
+  }
+
+  if (state.draw >= 10) {
+    return Math.random() < 0.78 ? "predict" : "request";
+  }
+
+  if (state.draw >= 5) {
+    return Math.random() < 0.62 ? "predict" : "request";
+  }
+
+  return Math.random() < 0.5 ? "predict" : "request";
+}
+
+function getPsychPresentation() {
+  const progress = getGalleryProgress();
+
+  if (progress.trueEndSeen) {
+    return Math.random() < 0.86 ? "quiet" : "cinematic";
+  }
+
+  if (state.draw >= 12) {
+    return Math.random() < 0.72 ? "quiet" : "cinematic";
+  }
+
+  if (state.draw >= 10) {
+    return Math.random() < 0.62 ? "quiet" : "cinematic";
+  }
+
+  if (state.draw >= 5) {
+    return Math.random() < 0.42 ? "quiet" : "cinematic";
+  }
+
+  return "cinematic";
 }
 
 function maybeStartPsychEvent() {
@@ -1102,22 +2046,39 @@ function maybeStartPsychEvent() {
     return false;
   }
 
-  if (Math.random() >= PSYCH_EVENT_CHANCE) {
+  if (Math.random() >= getPsychEventChance()) {
     return false;
   }
 
-  const type = Math.random() < 0.5 ? "predict" : "request";
-  const cpuHand = randomCpuHand();
-  const requestedHand = randomCpuHand();
-  state.psychEvent = { type, cpuHand, requestedHand };
+  const type = getPsychEventType();
+  const hintHand = randomCpuHand();
+  const shouldBeHonest = Math.random() < getPredictionHonestyRate();
+  const otherHands = Object.keys(hands).filter((key) => key !== hintHand);
+  const cpuHand = shouldBeHonest ? hintHand : otherHands[Math.floor(Math.random() * otherHands.length)];
+  const predictedHand = hintHand;
+  const requestedHand = hintHand;
+  const presentation = getPsychPresentation();
+  state.psychEvent = { type, cpuHand, predictedHand, requestedHand, presentation };
 
   setCharacter(type === "predict" ? "smug" : "happy");
-  triggerCinematicCutIn("psych");
-  showMessage(psychEventLine(state.psychEvent), undefined, { typewriter: true });
+  if (presentation === "cinematic") {
+    triggerCinematicCutIn("psych");
+  } else {
+    clearCinematicCutIn();
+  }
+  showMessage(psychEventLine(state.psychEvent), undefined, {
+    typewriter: true,
+    maxDuration: presentation === "quiet" ? 520 : 700,
+  });
   return true;
 }
 
 function showNextInputPrompt() {
+  if (showPostTrueStartMessage()) {
+    showInputGuideOnce();
+    return;
+  }
+
   if (maybeStartPsychEvent()) {
     showInputGuideOnce();
     return;
@@ -1192,8 +2153,19 @@ function typeMessage(text, options = {}) {
   step();
 }
 
+function setMessageLengthClass(text) {
+  if (!message) {
+    return;
+  }
+
+  const plainText = String(text || "").replace(/\n/g, "");
+  message.classList.toggle("is-long-message", plainText.length >= 18);
+  message.classList.toggle("is-very-long-message", plainText.length >= 28);
+}
+
 function showMessage(text, mood, options = {}) {
   message.textContent = text || "いくよ！";
+  setMessageLengthClass(text || "いくよ！");
   setStageMood(mood);
 
   if (mood === "is-calling") {
@@ -1232,6 +2204,12 @@ async function showIntroThenReady() {
 
   state.busy = false;
   updateCharacterByScore();
+  if (showPostTrueStartMessage()) {
+    setButtonsEnabled(true);
+    showInputGuideOnce();
+    return;
+  }
+
   if (maybeStartPsychEvent()) {
     setButtonsEnabled(true);
     showInputGuideOnce();
@@ -1501,8 +2479,9 @@ function fallbackSceneIllustration() {
   setSceneCharacter(mood);
 }
 
-function setSceneIllustration(sceneType, fallbackMood = "normal") {
+function setSceneIllustration(sceneType, fallbackMood = "normal", fallbackSceneType = null) {
   const src = imageSourceFor(sceneImages, sceneType, sceneType);
+  const fallbackSrc = fallbackSceneType ? imageSourceFor(sceneImages, fallbackSceneType, "playerWin") : null;
   const requestId = ++sceneIllustrationRequestId;
   sceneOverlay.dataset.fallbackMood = fallbackMood;
 
@@ -1521,6 +2500,24 @@ function setSceneIllustration(sceneType, fallbackMood = "normal") {
     }
 
     if (!img) {
+      if (fallbackSrc && fallbackSrc !== src) {
+        console.warn("Scene image fallback:", src);
+        preloadImage(fallbackSrc).then((fallbackImg) => {
+          if (requestId !== sceneIllustrationRequestId) {
+            return;
+          }
+
+          if (!fallbackImg) {
+            fallbackSceneIllustration();
+            return;
+          }
+
+          sceneIllustration.src = fallbackSrc;
+          sceneIllustration.hidden = false;
+        });
+        return;
+      }
+
       fallbackSceneIllustration();
       return;
     }
@@ -1528,6 +2525,154 @@ function setSceneIllustration(sceneType, fallbackMood = "normal") {
     sceneIllustration.src = src;
     sceneIllustration.hidden = false;
   });
+}
+
+function cancelSceneTyping() {
+  if (sceneTypingTimer) {
+    window.clearTimeout(sceneTypingTimer);
+    sceneTypingTimer = null;
+  }
+
+  sceneTypingId += 1;
+
+  if (sceneTypingResolve) {
+    const resolve = sceneTypingResolve;
+    sceneTypingResolve = null;
+    resolve();
+  }
+}
+
+function setSceneNextVisible(visible) {
+  if (!sceneNextButton) {
+    return;
+  }
+
+  sceneNextButton.hidden = !visible;
+}
+
+function resetSceneDialogState() {
+  cancelSceneTyping();
+  if (sceneAdvanceResolve) {
+    const resolve = sceneAdvanceResolve;
+    sceneAdvanceResolve = null;
+    resolve();
+  }
+  sceneDialogActive = false;
+  sceneCurrentFullText = "";
+  sceneCurrentDone = false;
+  setSceneNextVisible(false);
+}
+
+function typeSceneLine(text) {
+  return new Promise((resolve) => {
+    if (!sceneMessage) {
+      resolve();
+      return;
+    }
+
+    cancelSceneTyping();
+
+    const fullText = String(text || "");
+    const currentId = sceneTypingId;
+    const speed = fullText.length > 28 ? 16 : 22;
+    let index = 0;
+
+    sceneTypingResolve = resolve;
+    sceneCurrentFullText = fullText;
+    sceneCurrentDone = false;
+    sceneMessage.textContent = "";
+    setSceneNextVisible(false);
+
+    function finish() {
+      if (sceneTypingResolve === resolve) {
+        sceneTypingResolve = null;
+      }
+      sceneTypingTimer = null;
+      sceneCurrentDone = true;
+      setSceneNextVisible(true);
+      resolve();
+    }
+
+    function tick() {
+      if (currentId !== sceneTypingId) {
+        return;
+      }
+
+      index += 1;
+      sceneMessage.textContent = fullText.slice(0, index);
+
+      const char = fullText[index - 1];
+      if (index % 2 === 0 && char && ![" ", "　", "\n", "。", "、", "…"].includes(char)) {
+        AudioManager.playSound("textBlip");
+      }
+
+      if (index >= fullText.length) {
+        finish();
+        return;
+      }
+
+      sceneTypingTimer = window.setTimeout(tick, speed);
+    }
+
+    tick();
+  });
+}
+
+function waitForSceneAdvance() {
+  return new Promise((resolve) => {
+    sceneAdvanceResolve = resolve;
+  });
+}
+
+function advanceSceneDialog(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  if (!sceneDialogActive || !sceneOverlay || sceneOverlay.hidden) {
+    return;
+  }
+
+  if (!sceneCurrentDone) {
+    if (sceneTypingTimer) {
+      window.clearTimeout(sceneTypingTimer);
+      sceneTypingTimer = null;
+    }
+    sceneTypingId += 1;
+    sceneMessage.textContent = sceneCurrentFullText;
+    sceneCurrentDone = true;
+    setSceneNextVisible(true);
+
+    if (sceneTypingResolve) {
+      const resolve = sceneTypingResolve;
+      sceneTypingResolve = null;
+      resolve();
+    }
+    return;
+  }
+
+  if (sceneAdvanceResolve) {
+    const resolve = sceneAdvanceResolve;
+    sceneAdvanceResolve = null;
+    setSceneNextVisible(false);
+    resolve();
+  }
+}
+
+async function playSceneDialog(lines) {
+  const sequence = lines.filter(Boolean);
+
+  for (const line of sequence.length ? sequence : [""]) {
+    await typeSceneLine(line);
+    if (!sceneDialogActive) {
+      break;
+    }
+    await waitForSceneAdvance();
+    if (!sceneDialogActive) {
+      break;
+    }
+  }
 }
 
 async function showCharacterScene(mood, text, duration = 2200) {
@@ -1544,20 +2689,172 @@ async function showCharacterScene(mood, text, duration = 2200) {
   cabinet.classList.remove("is-scene");
 }
 
-async function showIllustrationScene(sceneType, text, duration = 3500, fallbackMood = "normal") {
+async function showIllustrationScene(sceneType, text, duration = 3500, fallbackMood = "normal", fallbackSceneType = null) {
+  await showSceneSequence({
+    sceneType,
+    fallbackSceneType,
+    mood: fallbackMood,
+    lines: [text || ""],
+    duration,
+    autoAdvance: true,
+  });
+}
+
+async function showSceneSequence({
+  sceneType,
+  fallbackSceneType = "playerWin",
+  mood = "happy",
+  lines = [],
+  duration = 2400,
+  autoAdvance = false,
+}) {
   stopChanceMessages();
   setButtonsEnabled(false);
-  setSceneIllustration(sceneType, fallbackMood);
-  sceneMessage.textContent = text || "";
+  hideInputGuide(false);
+  state.busy = true;
+  sceneDialogActive = !autoAdvance;
+  setSceneNextVisible(false);
+  setSceneIllustration(sceneType, mood, fallbackSceneType);
   sceneOverlay.hidden = false;
   cabinet.classList.add("is-scene", `scene-${sceneType}`);
 
-  await wait(duration);
+  try {
+    const sequence = lines.filter(Boolean);
 
-  sceneOverlay.hidden = true;
-  sceneOverlay.classList.remove("has-illustration");
-  sceneIllustration.hidden = true;
-  cabinet.classList.remove("is-scene", `scene-${sceneType}`);
+    if (autoAdvance) {
+      for (const line of sequence.length ? sequence : [""]) {
+        cancelSceneTyping();
+        sceneMessage.textContent = line;
+        setSceneNextVisible(false);
+        await wait(duration);
+      }
+    } else {
+      await playSceneDialog(sequence);
+    }
+  } finally {
+    resetSceneDialogState();
+    sceneOverlay.hidden = true;
+    sceneOverlay.classList.remove("has-illustration");
+    sceneIllustration.hidden = true;
+    cabinet.classList.remove("is-scene", `scene-${sceneType}`);
+    state.busy = false;
+  }
+}
+
+function getCurrentClearRoute() {
+  if (state.routeReachedFinal || state.finalJanken) {
+    return "finalWin";
+  }
+
+  if (state.routeReachedChance || state.chance) {
+    return "chanceWin";
+  }
+
+  return "normalWin";
+}
+
+function sceneTypeForClearRoute(routeId) {
+  if (routeId === "chanceWin") {
+    return "chanceWin";
+  }
+
+  if (routeId === "finalWin") {
+    return "finalWin";
+  }
+
+  return "playerWin";
+}
+
+function getProgressAfterRouteUnlock(currentRouteId) {
+  return sanitizeGalleryProgress({
+    ...getGalleryProgress(),
+    [currentRouteId]: true,
+  });
+}
+
+function getNextGoalHintLine(currentRouteId) {
+  const progress = getProgressAfterRouteUnlock(currentRouteId);
+  const missingRoutes = getMissingGalleryRoutes(progress);
+
+  if (missingRoutes.length === 0) {
+    if (!progress.trueEndSeen) {
+      return "思い出は全部そろったね。\nほんとのこと、話してもいい？";
+    }
+
+    return "また遊びに来てくれてありがとう。";
+  }
+
+  if (missingRoutes.includes("normalWin")) {
+    return "あとは普通の勝利も\n見てみて？";
+  }
+
+  if (missingRoutes.includes("gameOver")) {
+    return "負けた時にも\n別の思い出があるかも。";
+  }
+
+  if (missingRoutes.includes("chanceWin")) {
+    return "あとはあいこ10回。\nチャンスタイムを見つけて？";
+  }
+
+  if (missingRoutes.includes("finalWin")) {
+    return "あとはあいこ15回。\n最後の勝負まで来て？";
+  }
+
+  return "まだ見ていない思い出が\nどこかにあるよ。";
+}
+
+function endingLinesForRoute(routeId) {
+  if (state.trueEndingQueued) {
+    return TRUE_END_UNLOCK_LINES;
+  }
+
+  if (routeId === "chanceWin") {
+    return ["チャンスタイムまで\n見つけたんだね。", getNextGoalHintLine(routeId)];
+  }
+
+  if (routeId === "finalWin") {
+    return ["最後の勝負まで\n来てくれたんだね。", getNextGoalHintLine(routeId)];
+  }
+
+  return ["今日はあなたの勝ちだね。", getNextGoalHintLine(routeId)];
+}
+
+async function showRouteEnding(routeId) {
+  const sceneType = sceneTypeForClearRoute(routeId);
+  await showSceneSequence({
+    sceneType,
+    fallbackSceneType: "playerWin",
+    mood: routeId === "finalWin" ? "worried" : "happy",
+    lines: endingLinesForRoute(routeId),
+  });
+}
+
+async function showTrueEnding({ replay = false } = {}) {
+  const progress = getGalleryProgress();
+  state.showingTrueEnding = true;
+  AudioManager.switchBgm("trueEnd");
+
+  if (!replay) {
+    progress.trueEndSeen = true;
+    state.galleryProgress = progress;
+    saveGalleryProgress(progress);
+    state.trueEndingQueued = false;
+  }
+
+  try {
+    AudioManager.playSound("youwin");
+    await showSceneSequence({
+      sceneType: "trueEnd",
+      fallbackSceneType: "playerWin",
+      mood: "happy",
+      lines: TRUE_END_LINES,
+      duration: 2300,
+    });
+  } finally {
+    state.showingTrueEnding = false;
+    AudioManager.stopBgm();
+    updateGalleryButton();
+  }
 }
 
 function renderHand(target, handKey) {
@@ -1615,6 +2912,62 @@ function randomCpuHand() {
   return keys[Math.floor(Math.random() * keys.length)];
 }
 
+function getDrawAssistRate() {
+  if (state.finalJanken) {
+    return 0;
+  }
+
+  const progress = getGalleryProgress();
+  const targetRoute = getNextTargetRoute();
+  const trueEndSeen = progress.trueEndSeen === true;
+
+  if (trueEndSeen) {
+    if (state.draw >= 10) {
+      return 0.32;
+    }
+
+    if (state.draw >= 5) {
+      return 0.22;
+    }
+
+    return 0.12;
+  }
+
+  if (targetRoute === "normalWin" || targetRoute === "gameOver") {
+    return 0;
+  }
+
+  if (targetRoute === "chanceWin") {
+    if (state.draw >= 9) {
+      return 0.22;
+    }
+
+    if (state.draw >= 7) {
+      return 0.12;
+    }
+
+    return 0;
+  }
+
+  if (targetRoute === "finalWin") {
+    if (state.draw >= 14) {
+      return 0.38;
+    }
+
+    if (state.draw >= 12) {
+      return 0.26;
+    }
+
+    if (state.draw >= 10) {
+      return 0.16;
+    }
+
+    return 0;
+  }
+
+  return 0;
+}
+
 function cpuHandForForcedResult(player, result) {
   if (result === "win") {
     return hands[player].beats;
@@ -1639,6 +2992,11 @@ function chooseCpuHand(player) {
     const cpuHand = state.psychEvent.cpuHand;
     state.psychEvent = null;
     return cpuHand;
+  }
+
+  const drawAssistRate = getDrawAssistRate();
+  if (drawAssistRate > 0 && Math.random() < drawAssistRate) {
+    return player;
   }
 
   return randomCpuHand();
@@ -1696,8 +3054,13 @@ function resetScore() {
   state.draw = 0;
   state.drawWarningShown = false;
   state.finalConfirmHand = null;
+  state.routeReachedChance = false;
+  state.routeReachedFinal = false;
+  state.trueEndingQueued = false;
   state.psychEvent = null;
   state.nextCallMode = "normal";
+  state.postTrueRecordAnnounced = false;
+  state.postTrueNewRecordShownFor = 0;
   state.lastLine = "";
   setFinalJankenMode(false);
   setChanceMode(false);
@@ -1708,11 +3071,13 @@ function cleanupForTitle() {
   stopCountdown();
   stopChanceMessages();
   clearCinematicCutIn();
+  resetSceneDialogState();
   cancelMessageTyping();
   clearResultLabel();
   clearCharacterBeat();
   hideInputGuide(false);
   state.finalConfirmHand = null;
+  state.showingTrueEnding = false;
   setSelectedButton();
   setButtonsEnabled(false);
   renderHand(playerHand, null);
@@ -1771,23 +3136,52 @@ async function showGameOverThenTitle() {
   const flowId = ++state.flowId;
   stopCountdown();
   stopChanceMessages();
+  setButtonsEnabled(false);
   AudioManager.playSound("gameover");
   finalTitle.textContent = "GAME OVER";
   finalMessage.textContent = "また挑戦してね";
   retryButton.hidden = true;
-  countdown.parentElement.hidden = true;
+  const countdownWrap = countdown ? countdown.closest(".countdown") : null;
+  if (countdownWrap) {
+    countdownWrap.hidden = true;
+  }
+  endOverlay.hidden = false;
   cabinet.classList.remove("end-win");
   cabinet.classList.add("end-lose");
   setCharacter("win");
   showMessage(randomLine(dialogue.cpuLeadBig.cpuWin), "is-result is-win", { typewriter: true });
 
-  await wait(2400);
+  await wait(1200);
 
   if (flowId !== state.flowId) {
     return;
   }
 
-  await showIllustrationScene("playerLose", randomLine(SCENE_PLAYER_LOSE_LINES), 3600, "happy");
+  await showSceneSequence({
+    sceneType: "playerLose",
+    fallbackSceneType: "playerLose",
+    mood: "happy",
+    lines: ["ここまで遊んでくれてありがとう。", "また来てくれたら、うれしいな。"],
+  });
+
+  if (flowId !== state.flowId) {
+    return;
+  }
+
+  unlockGalleryRoute("gameOver");
+
+  if (isGalleryComplete() && !getGalleryProgress().trueEndSeen) {
+    state.trueEndingQueued = true;
+  }
+
+  if (state.trueEndingQueued) {
+    await showTrueEnding();
+
+    if (flowId === state.flowId) {
+      returnToTitleWithBlackout();
+    }
+    return;
+  }
 
   if (flowId === state.flowId) {
     returnToTitleWithBlackout();
@@ -1809,6 +3203,26 @@ function startContinueCountdown() {
   }, 1000);
 }
 
+function handleGalleryUnlockForEnding(result) {
+  let routeId = null;
+
+  if (result === "win") {
+    routeId = getCurrentClearRoute();
+  }
+
+  if (!routeId) {
+    return null;
+  }
+
+  unlockGalleryRoute(routeId);
+
+  if (isGalleryComplete() && !getGalleryProgress().trueEndSeen) {
+    state.trueEndingQueued = true;
+  }
+
+  return routeId;
+}
+
 async function endGame(result) {
   cancelEndFlow();
   const flowId = state.flowId;
@@ -1823,9 +3237,9 @@ async function endGame(result) {
   finalMessage.textContent = result === "win" ? "完全勝利！ また遊んでね！" : "リベンジする？";
   retryButton.textContent = "リベンジする";
   endOverlay.hidden = false;
+  const routeId = handleGalleryUnlockForEnding(result);
 
   if (result === "win") {
-    unlockGallery();
     AudioManager.playSound("youwin");
     setCharacter("panic");
     showMessage(randomLine(dialogue.playerLeadBig.cpuLose), "is-result is-lose", { typewriter: true });
@@ -1835,7 +3249,15 @@ async function endGame(result) {
       return;
     }
 
-    await showIllustrationScene("playerWin", randomLine(SCENE_PLAYER_WIN_LINES), 3600, "worried");
+    await showRouteEnding(routeId);
+
+    if (flowId !== state.flowId) {
+      return;
+    }
+
+    if (state.trueEndingQueued) {
+      await showTrueEnding();
+    }
 
     if (flowId === state.flowId) {
       returnToTitleWithBlackout();
@@ -1855,6 +3277,7 @@ function restartMatch() {
   AudioManager.playSound("start");
   cancelEndFlow();
   clearCinematicCutIn();
+  resetSceneDialogState();
   cancelMessageTyping();
   clearResultLabel();
   clearCharacterBeat();
@@ -1882,10 +3305,12 @@ function addRoundScore(result) {
     finalStarted: false,
     finalResolved: false,
     finalResult: null,
+    postTrueNewRecord: false,
   };
 
   if (result === "draw") {
     state.draw += 1;
+    scoreChange.postTrueNewRecord = checkPostTrueDrawRecord();
 
     if (state.draw >= DRAW_WARNING_COUNT && !state.drawWarningShown) {
       state.drawWarningShown = true;
@@ -1894,13 +3319,16 @@ function addRoundScore(result) {
 
     if (state.draw >= CHANCE_DRAW_COUNT && !state.chance) {
       setChanceMode(true);
+      state.routeReachedChance = true;
       scoreChange.chanceStarted = true;
     }
 
-    if (state.draw >= FINAL_DRAW_COUNT && !state.finalJanken) {
+    if (state.draw >= FINAL_DRAW_COUNT && !state.finalJanken && getGalleryProgress().trueEndSeen !== true) {
       setFinalJankenMode(true);
+      state.routeReachedFinal = true;
       if (!state.chance) {
         setChanceMode(true);
+        state.routeReachedChance = true;
       }
       scoreChange.finalStarted = true;
     }
@@ -1937,11 +3365,19 @@ async function startGame() {
   state.busy = true;
   startButton.disabled = true;
   closeGallery(false);
+  if (galleryButton) {
+    galleryButton.hidden = true;
+    galleryButton.classList.remove("is-new");
+  }
+  if (relationResetButton) {
+    relationResetButton.hidden = true;
+  }
   endOverlay.hidden = true;
   sceneOverlay.hidden = true;
   sceneOverlay.classList.remove("has-illustration");
   sceneIllustration.hidden = true;
   clearCinematicCutIn();
+  resetSceneDialogState();
   cancelMessageTyping();
   clearResultLabel();
   clearCharacterBeat();
@@ -2009,13 +3445,13 @@ async function playRound(player) {
     const callSound = callMode === "draw" ? "call1" : index === 0 ? "call1" : "call2";
     const beatClass = callMode === "draw" ? "is-beat-1" : index === 0 ? "is-beat-1" : "is-beat-2";
     showMessage(call, "is-calling");
-    AudioManager.playSound(callSound);
+    AudioManager.playJankenCallSfx(callSound);
     playCharacterBeat(beatClass);
     await wait(420);
   }
 
   showMessage(revealCall, "is-calling");
-  AudioManager.playSound("call3");
+  AudioManager.playJankenCallSfx("call3");
   playCharacterBeat("is-beat-3");
   await wait(40);
 
@@ -2065,6 +3501,13 @@ async function playRound(player) {
   } else if (scoreChange.bonus > 1 && result === "lose") {
     AudioManager.playSound("lose");
     showMessage(randomLine(dialogue.chance.cpuWin), "is-result is-win player-lose is-double", { typewriter: true });
+  } else if (scoreChange.postTrueNewRecord) {
+    setCharacter(state.draw >= 10 ? "excited" : "happy");
+    AudioManager.playSound("draw");
+    showMessage(postTrueNewRecordLine(), "is-result is-draw player-draw", {
+      typewriter: true,
+      maxDuration: 760,
+    });
   } else if (state.finalJanken && result === "draw") {
     AudioManager.playSound("draw");
     showMessage(randomLine(FINAL_JANKEN_IDLE_LINES), "is-result is-draw player-draw is-final-entry", { typewriter: true });
@@ -2082,10 +3525,10 @@ async function playRound(player) {
   const resultPause = roundEndsMatch
     ? 2200
     : scoreChange.chanceStarted
-      ? 2200
+      ? 2000
       : scoreChange.warningStarted
-        ? 1900
-        : 1600;
+        ? 1700
+        : 1350;
 
   await wait(resultPause);
 
@@ -2110,9 +3553,27 @@ sceneIllustration.addEventListener("error", fallbackSceneIllustration);
 startButton.addEventListener("click", startGame);
 retryButton.addEventListener("click", restartMatch);
 galleryButton?.addEventListener("click", openGallery);
+relationResetButton?.addEventListener("click", () => {
+  resetGalleryProgress();
+  updateGalleryButton();
+  updateRelationResetButton();
+  showTitle();
+});
 galleryCloseButton?.addEventListener("click", () => closeGallery());
 galleryPrevButton?.addEventListener("click", () => moveGallery(-1));
 galleryNextButton?.addEventListener("click", () => moveGallery(1));
+galleryImage?.addEventListener("click", replayTrueEndFromGallery);
+sceneOverlay?.addEventListener("pointerup", advanceSceneDialog);
+sceneNextButton?.addEventListener("click", advanceSceneDialog);
+document.addEventListener("keydown", (event) => {
+  if (!sceneDialogActive || !sceneOverlay || sceneOverlay.hidden) {
+    return;
+  }
+
+  if (event.key === "Enter" || event.key === " ") {
+    advanceSceneDialog(event);
+  }
+});
 muteButton.addEventListener("click", () => {
   AudioManager.initAudio();
   if (trackDebugToggleTap()) {
@@ -2125,6 +3586,26 @@ muteButton.addEventListener("click", () => {
 });
 
 choiceButtons.forEach((button) => {
+  button.addEventListener("pointerdown", () => {
+    if (button.disabled || state.busy) {
+      return;
+    }
+
+    button.classList.add("is-pressing");
+  });
+
+  button.addEventListener("pointerup", () => {
+    clearChoicePressState(button);
+  });
+
+  button.addEventListener("pointercancel", () => {
+    clearChoicePressState(button);
+  });
+
+  button.addEventListener("pointerleave", () => {
+    clearChoicePressState(button);
+  });
+
   button.addEventListener("click", () => {
     handleChoiceButtonClick(button.dataset.hand);
   });
@@ -2153,6 +3634,10 @@ scheduleIdleTask(() => {
 setCharacter("normal");
 AudioManager.initAudio();
 AudioManager.updateMuteButton();
+if (galleryButton) {
+  galleryButton.hidden = true;
+  galleryButton.classList.remove("is-new");
+}
 updateGalleryButton();
 if (DEBUG_MODE) {
   toggleDebugMode(true);
